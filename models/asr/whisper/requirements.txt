@@ -1,0 +1,4 @@
+qai_hub_models[whisper_base_en]==0.18.0
+audio2numpy==0.1.2
+samplerate==0.2.1
+onnxruntime-qnn==1.20.0
