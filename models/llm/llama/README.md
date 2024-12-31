@@ -30,6 +30,8 @@ python -m models.llm.llama.convert_onnx --inference
 
 ## Quantize Llama-3.2-1B-Instruct
 
+![Llama Quantization Workflow](./llama_qda_workflow.png)
+
 ### Run the whole workflow (~20mins)
 
 ```bash
@@ -70,7 +72,7 @@ python ./models/llm/llama/main.py --quantize-qdq
 
 ```bash
 # use --prompt to specify the prompt, otherwise use the default ones
-# use --profile to enable profiling
+# use --profile to enable profiling (by QNN)
 python ./models/llm/llama/infer_qnpu.py --prompt "Hello, world!"
 ```
 
@@ -83,9 +85,12 @@ Predefined configurations in `.vscode/launch.json`
 
 ## TODO
 
-- [ ] Tweak model inputs/outputs, e.g. StaticCache
-- [ ] Allow specifing calibration dataset
+- [ ] Tweak model inputs/outputs, e.g. using StaticCache
+- [ ] Set up evaluation pipeline
+- [ ] Allow specifying calibration dataset
 - [ ] Share weights between prefill and decode
+- [ ] Try out different data types for quantization, e.g. int8, int16
 - [ ] Support meta-llama/Llama-3.2-3B-Instruct
 - [ ] Support meta-llama/Llama-3.2-11B-Vision-Instruct
-- [ ] Adopt Black and PDM as code formatter and package manager
+- [ ] Adopt Ruff and PDM as code formatter and package manager
+- [ ] Integrate with [Olive](https://github.com/microsoft/Olive/)
