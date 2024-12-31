@@ -177,4 +177,6 @@ Desktop.ini
 **/temp*
 
 # others
-models/asr/whisper/transcript.txt
+**/outputs*
+transcript.txt
+qnpu_profile.csv
