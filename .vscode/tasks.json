@@ -1,0 +1,55 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Resolve Module Name",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/scripts/resolve_module.py",
+        "--module-name",
+        "${file}"
+      ],
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent" // Optional: Hide the task output
+      }
+    },
+    {
+      "label": "Resolve Package Path",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/scripts/resolve_module.py",
+        "--package-root",
+        "${file}"
+      ],
+      "group": "build"
+    },
+    {
+      "label": "Echo Module Name",
+      "command": "echo ${input:moduleName}",
+      "type": "shell",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "moduleName",
+      "type": "command",
+      "command": "workbench.action.tasks.runTask",
+      "args": {
+        "task": "Resolve Module Name"
+      }
+    },
+    {
+      "id": "modulePath",
+      "type": "command",
+      "command": "workbench.action.tasks.runTask",
+      "args": {
+        "task": "Resolve Package Path"
+      }
+    }
+  ]
+}
