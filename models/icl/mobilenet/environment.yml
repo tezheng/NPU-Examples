@@ -1,0 +1,10 @@
+channels:
+  - conda-forge
+  - pytorch
+  - huggingface
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - poetry>=1.8.0,<1.9.0

@@ -1,0 +1,145 @@
+{
+  "input_model": {
+    "type": "HfModel",
+    "model_path": "google/mobilenet_v2_1.4_224",
+    "task": "image-classification",
+    "load_kwargs": { "trust_remote_code": true },
+    "generative": false,
+    "io_config": {
+      "input_names": ["input_image"],
+      "input_shapes": [[1, 3, 224, 224]],
+      "output_names": ["logits"]
+    }
+  },
+  "systems": {
+    "host_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        { "device": "cpu", "execution_providers": ["CPUExecutionProvider"] }
+      ]
+    },
+    "target_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        { "device": "npu", "execution_providers": ["QNNExecutionProvider"] }
+      ]
+    }
+  },
+  "engine": {
+    "host": "host_system",
+    "target": "target_system"
+  },
+  "data_configs": [
+    {
+      "name": "quant_data_config",
+      "user_script": "imagenet.py",
+      "dataloader_config": {
+        "type": "mobilenet_calibration_reader",
+        "data_dir": "data/imagenet_subset/train",
+        "batch_size": 1
+      }
+    },
+    {
+      "name": "metric_data_config",
+      "user_script": "imagenet.py",
+      "load_dataset_config": {
+        "type": "qnn_evaluation_dataset",
+        "data_dir": "data/imagenet_subset/test"
+      },
+      "dataloader_config": {
+        "batch_size": 1
+      },
+      "post_process_data_config": {
+        "type": "qnn_post_process"
+      }
+    }
+  ],
+  "evaluators": {
+    "common_evaluator": {
+      "metrics": [
+        {
+          "name": "accuracy",
+          "type": "accuracy",
+          "data_config": "metric_data_config",
+          "sub_types": [
+            {
+              "name": "accuracy_score",
+              "priority": 1,
+              "metric_config": { "task": "multiclass", "num_classes": 1001 }
+            }
+          ],
+          "user_config": {
+            "inference_settings": {
+              "onnx": {
+                "session_options": {
+                  "extra_session_config": {
+                    "session.disable_cpu_ep_fallback": "1"
+                  }
+                },
+                "execution_provider": "QNNExecutionProvider",
+                "provider_options": [
+                  {
+                    "htp_graph_finalization_optimization_mode": 3,
+                    "htp_performance_mode": "burst"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "name": "latency",
+          "type": "latency",
+          "data_config": "metric_data_config",
+          "sub_types": [{ "name": "avg", "priority": 2 }],
+          "user_config": {
+            "inference_settings": {
+              "onnx": {
+                "session_options": {
+                  "extra_session_config": {
+                    "session.disable_cpu_ep_fallback": "1"
+                  }
+                },
+                "execution_provider": "QNNExecutionProvider",
+                "provider_options": [
+                  {
+                    "htp_graph_finalization_optimization_mode": 3,
+                    "htp_performance_mode": "burst"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "passes": {
+    "conversion": {
+      "device": "cpu",
+      "type": "OnnxConversion",
+      "target_opset": 17,
+      "save_as_external_data": true,
+      "all_tensors_to_one_file": true,
+      "dynamic": false,
+      "use_dynamo_exporter": false
+    },
+    "qnn_preprocess": {
+      "type": "QNNPreprocess",
+      "save_as_external_data": true,
+      "all_tensors_to_one_file": true
+    },
+    "quantization": {
+      "type": "OnnxStaticQuantization",
+      "data_config": "quant_data_config",
+      "quant_preprocess": true,
+      "activation_type": "QUInt16",
+      "weight_type": "QUInt8"
+    }
+  },
+  "evaluator": "common_evaluator",
+  "evaluate_input_model": false,
+  "cache_dir": "temp/cache",
+  "clean_cache": true,
+  "output_dir": "outputs/google/mobilenet_v2"
+}
