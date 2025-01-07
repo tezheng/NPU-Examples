@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "NPU-Examples[Llama]"
+version = "0.1.0"
+description = ""
+authors = ["Zheng Te <1221537+tezheng@users.noreply.github.com>"]
+readme = "README.md"
+license = "MIT"
+homepage = "https://github.com/tezheng/NPU-Examples"
+repository = "https://github.com/tezheng/NPU-Examples.git"
+keywords = ["NPU", "llama", "inference", "onnxruntime", "quantization", "qdq"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+npu-examples = { path = "../../..", develop = true }
+
+
+[tool.poetry.group.dev.dependencies]
+ipywidgets = "^8.1.0"
+jupyterlab = "^4.3.0"
+pytest = "^7.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
