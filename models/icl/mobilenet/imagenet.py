@@ -1,3 +1,5 @@
+# -------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 from pathlib import Path
 from logging import getLogger
 
@@ -7,9 +9,9 @@ import polars as pl
 import numpy as np
 from PIL import Image
 
-from torch import from_numpy
+from torch import from_numpy, Tensor
 from torchvision import transforms
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import (DataLoader, Dataset)
 from transformers import AutoModelForImageClassification
 
 from olive.data.registry import Registry
@@ -18,37 +20,37 @@ logger = getLogger(__name__)
 
 
 class MobileNetDataset(Dataset):
-  def __init__(self, data_dir: str):
+  def __init__(self, data_dir: str) -> None:
     with np.load(Path(data_dir) / 'data.npz') as data:
       self.images = from_numpy(data['images'])
       self.labels = from_numpy(data['labels'])
 
-  def __len__(self):
+  def __len__(self) -> int:
     return min(len(self.images), len(self.labels))
 
-  def __getitem__(self, idx):
-    # data = torch.unsqueeze(self.data[idx], dim=0)
-    label = self.labels[idx] if self.labels is not None else -1
+  def __getitem__(self, idx) -> tuple[dict[str, Tensor], int]:
+    label = int(self.labels[idx].item()) if self.labels is not None else -1
     return {'input_image': self.images[idx]}, label
 
 
 @Registry.register_dataset()
-def qnn_evaluation_dataset(data_dir, **kwargs):
+def qnn_evaluation_dataset(data_dir, **kwargs) -> Dataset:
   return MobileNetDataset(data_dir)
 
 
 @Registry.register_post_process()
-def qnn_post_process(output):
+def qnn_post_process(output) -> np.ndarray:
   return output.argmax(axis=-1)
 
 
 @Registry.register_dataloader()
-def mobilenet_calibration_reader(dataset, batch_size, data_dir, **kwargs):
+def mobilenet_calibration_reader(dataset, batch_size, data_dir,
+                                 **kwargs) -> DataLoader:
   dataset = MobileNetDataset(data_dir)
   return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
 
-def preprocess_image(image):
+def preprocess_image(image) -> np.ndarray:
   src_img = Image.open(image).convert('RGB')
   transformations = transforms.Compose(
     [
@@ -61,7 +63,10 @@ def preprocess_image(image):
   return transformations(src_img).numpy().astype(np.float32)
 
 
-def download_dataset(data_dir: Path, split: str, size: int):
+def download_dataset(data_dir: Path, split: str, size: int) -> None:
+  logger.info(
+    f"Downloading {size} images from imagenet-1k {split} dataset into {data_dir}...")
+
   data_dir = data_dir / str(split)
   data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -116,12 +121,15 @@ def download_dataset(data_dir: Path, split: str, size: int):
   df.write_csv(data_dir / 'ground_truth.csv')
   df.write_parquet(data_dir / 'ground_truth.parquet')
 
+  logger.info(f"Downloaded {len(records)} images into {data_dir}.")
 
+
+# HACK! Workaround for multiprocessing on Windows
 if __name__ == '__mp_main__':
-  import sys
-  sys.exit(0)
   # from multiprocessing import freeze_support
   # freeze_support()
+  import sys
+  sys.exit(0)
 
 data_dir = Path('./data/imagenet_subset').resolve()
 data_dir.mkdir(parents=True, exist_ok=True)

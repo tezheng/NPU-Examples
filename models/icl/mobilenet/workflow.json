@@ -67,25 +67,7 @@
               "priority": 1,
               "metric_config": { "task": "multiclass", "num_classes": 1001 }
             }
-          ],
-          "user_config": {
-            "inference_settings": {
-              "onnx": {
-                "session_options": {
-                  "extra_session_config": {
-                    "session.disable_cpu_ep_fallback": "1"
-                  }
-                },
-                "execution_provider": "QNNExecutionProvider",
-                "provider_options": [
-                  {
-                    "htp_graph_finalization_optimization_mode": 3,
-                    "htp_performance_mode": "burst"
-                  }
-                ]
-              }
-            }
-          }
+          ]
         },
         {
           "name": "latency",
@@ -103,7 +85,8 @@
                 "execution_provider": "QNNExecutionProvider",
                 "provider_options": [
                   {
-                    "htp_graph_finalization_optimization_mode": 3,
+                    "qnn_context_priority": "high",
+                    "htp_graph_finalization_optimization_mode": "3",
                     "htp_performance_mode": "burst"
                   }
                 ]

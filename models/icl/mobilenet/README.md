@@ -1,5 +1,12 @@
 # MobileNet
 
+Quantize [MobileNet V2](https://huggingface.co/google/mobilenet_v2_1.4_224) with [Olive](https://github.com/microsoft/Olive) using [ONNX QDQ](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html#onnx-quantization-representation-format).
+
+Dependencies:
+
+- [Olive](https://github.com/microsoft/Olive)
+- [onnxruntime-qnn](https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html#pre-built-packages-windows-only)
+
 ## Set up Environment with Conda and Poetry
 
 ```bash
@@ -50,9 +57,12 @@ Set breakpoints in `__main__.py`, select `Python Debugger: MobileNetV2` in the d
 
 ## TODO
 
+- [] Packaging
+- [] Support QNN profiling
 - [] Enable `evaluate_input_model` with multiple `accelerator`
-- [] Add JIT pass
+- [] Generate EPContext model, aka "JIT"
 - [] Resume from checkpoint
 - [] Adopt `IsolatedORTSystem`
 - [] Implement ImagenetDataset
+- [] Add NPU support in `OrtSessionParamsTuning`
 - [] auto-opt
