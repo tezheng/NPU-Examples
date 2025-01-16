@@ -1,17 +1,16 @@
-# -------------------------------------------------------------------------
-# -------------------------------------------------------------------------
+
 from pathlib import Path
 from logging import getLogger
 
-from datasets import load_dataset
+from datasets import load_dataset, Split
 import polars as pl
 
 import numpy as np
 from PIL import Image
 
-from torch import from_numpy, Tensor
+import torch
 from torchvision import transforms
-from torch.utils.data import (DataLoader, Dataset)
+from torch.utils.data import DataLoader, Dataset
 from transformers import AutoModelForImageClassification
 
 from olive.data.registry import Registry
@@ -20,38 +19,43 @@ logger = getLogger(__name__)
 
 
 class MobileNetDataset(Dataset):
-  def __init__(self, data_dir: str) -> None:
+  def __init__(self, data_dir: str):
     with np.load(Path(data_dir) / 'data.npz') as data:
-      self.images = from_numpy(data['images'])
-      self.labels = from_numpy(data['labels'])
+      self.images = torch.from_numpy(data['images'])
+      self.labels = torch.from_numpy(data['labels'])
 
-  def __len__(self) -> int:
+  def __len__(self):
     return min(len(self.images), len(self.labels))
 
-  def __getitem__(self, idx) -> tuple[dict[str, Tensor], int]:
-    label = int(self.labels[idx].item()) if self.labels is not None else -1
+  def __getitem__(self, idx):
+    # data = torch.unsqueeze(self.data[idx], dim=0)
+    label = self.labels[idx] if self.labels is not None else -1
     return {'input_image': self.images[idx]}, label
 
 
 @Registry.register_dataset()
-def qnn_evaluation_dataset(data_dir, **kwargs) -> Dataset:
+def qnn_evaluation_dataset(data_dir, **kwargs):
   return MobileNetDataset(data_dir)
 
 
 @Registry.register_post_process()
-def qnn_post_process(output) -> np.ndarray:
+def qnn_post_process(output):
   return output.argmax(axis=-1)
 
 
 @Registry.register_dataloader()
-def mobilenet_calibration_reader(dataset, batch_size, data_dir,
-                                 **kwargs) -> DataLoader:
+def mobilenet_calibration_reader(dataset, batch_size, data_dir, **kwargs):
   dataset = MobileNetDataset(data_dir)
   return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
 
-def preprocess_image(image) -> np.ndarray:
-  src_img = Image.open(image).convert('RGB')
+def preprocess_image(image):
+  src_img = Image.open(image)
+
+  # If black and white image, convert to rgb (all 3 channels the same)
+  if len(np.shape(src_img)) == 2:
+    src_img = src_img.convert(mode='RGB')
+
   transformations = transforms.Compose(
     [
       transforms.Resize(256),
@@ -63,23 +67,21 @@ def preprocess_image(image) -> np.ndarray:
   return transformations(src_img).numpy().astype(np.float32)
 
 
-def download_dataset(data_dir: Path, split: str, size: int) -> None:
-  logger.info(
-    f"Downloading {size} images from imagenet-1k {split} dataset into {data_dir}...")
-
+def download_dataset(data_dir: Path, split: Split, size: int) -> None:
   data_dir = data_dir / str(split)
   data_dir.mkdir(parents=True, exist_ok=True)
 
-  # Load the dataset in streaming mode to avoid downloading the full dataset
+  # Load the dataset with a filtering function
   dataset = load_dataset(
     'imagenet-1k',
     split=split,
-    streaming=True,
+    streaming=True,  # Enable streaming to avoid full download
     trust_remote_code=True,
+    # cache_dir=data_dir,
   )
 
   model = AutoModelForImageClassification.from_pretrained(
-    'google/mobilenet_v2_1.4_224')
+    "google/mobilenet_v2_1.4_224")
   model.eval()
 
   # Iterate over the dataset to extract a subset of the specified size
@@ -92,15 +94,15 @@ def download_dataset(data_dir: Path, split: str, size: int) -> None:
     # Save the image file and its metadata
     img_path = data_dir / f"img_{i}.jpg"
     sample['image'].save(img_path)
-    logger.debug(f"Saved image to {img_path}")
+    logger.debug("Saved image to %s" % (img_path))
 
     # Process the image and store it as a tensor
     image = preprocess_image(img_path)
     images.append(image)
 
     # Run the model on the image to get the predicted label
-    input = dict(pixel_values=from_numpy(image).unsqueeze(dim=0))
-    outputs = model(**input)
+    inputs = {"pixel_values": from_numpy(image).unsqueeze(dim=0)}
+    outputs = model(**inputs)
     label = outputs['logits'][0, :].argmax(axis=-1).item()
 
     # Save the image and label as a record
@@ -121,15 +123,6 @@ def download_dataset(data_dir: Path, split: str, size: int) -> None:
   df.write_csv(data_dir / 'ground_truth.csv')
   df.write_parquet(data_dir / 'ground_truth.parquet')
 
-  logger.info(f"Downloaded {len(records)} images into {data_dir}.")
-
-
-# HACK! Workaround for multiprocessing on Windows
-if __name__ == '__mp_main__':
-  # from multiprocessing import freeze_support
-  # freeze_support()
-  import sys
-  sys.exit(0)
 
 data_dir = Path('./data/imagenet_subset').resolve()
 data_dir.mkdir(parents=True, exist_ok=True)
@@ -138,6 +131,6 @@ completion_marker = data_dir / '.complete'
 if completion_marker.exists():
   logger.debug('Dataset already downloaded.')
 else:
-  download_dataset(data_dir, 'train', size=64)
-  download_dataset(data_dir, 'test', size=128)
+  download_dataset(data_dir, Split.TRAIN, size=64)
+  download_dataset(data_dir, Split.TEST, size=128)
   completion_marker.touch()

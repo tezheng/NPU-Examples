@@ -8,7 +8,11 @@
     "io_config": {
       "input_names": ["input_image"],
       "input_shapes": [[1, 3, 224, 224]],
-      "output_names": ["logits"]
+      "output_names": ["logits"],
+      "dynamic_axes": {
+        "input_image": { "0": "batch_size" },
+        "logits": { "0": "batch_size" }
+      }
     }
   },
   "systems": {
@@ -23,11 +27,33 @@
       "accelerators": [
         { "device": "npu", "execution_providers": ["QNNExecutionProvider"] }
       ]
+    },
+    "qnn_ep_env": {
+      "type": "IsolatedORT",
+      "accelerators": [
+        { "device": "npu", "execution_providers": ["QNNExecutionProvider"] }
+      ],
+      "python_environment_path": "C:/Users/zhengte/micromamba/envs/llama-qnpu-test1/",
+      "prepend_to_path": [
+        "C:/Qualcomm/AIStack/QAIRT/2.27.0.240926/lib/aarch64-windows-msvc"
+      ]
     }
   },
   "engine": {
     "host": "host_system",
-    "target": "target_system"
+    "target": "target_system",
+    "cache_dir": "temp/cache",
+    "clean_cache": true,
+    "clean_evaluation_cache": true,
+    "evaluator": "common_evaluator",
+    "evaluate_input_model": false,
+    "log_to_file": true,
+    "packaging_config": {
+      "type": "Zipfile",
+      "name": "mobilenet_v2",
+      "include_runtime_packages": false
+    },
+    "output_dir": "outputs/google/mobilenet_v2"
   },
   "data_configs": [
     {
@@ -46,12 +72,8 @@
         "type": "qnn_evaluation_dataset",
         "data_dir": "data/imagenet_subset/test"
       },
-      "dataloader_config": {
-        "batch_size": 1
-      },
-      "post_process_data_config": {
-        "type": "qnn_post_process"
-      }
+      "dataloader_config": { "batch_size": 1 },
+      "post_process_data_config": { "type": "qnn_post_process" }
     }
   ],
   "evaluators": {
@@ -73,7 +95,12 @@
           "name": "latency",
           "type": "latency",
           "data_config": "metric_data_config",
-          "sub_types": [{ "name": "avg", "priority": 2 }],
+          "sub_types": [
+            { "name": "avg", "priority": 2 },
+            { "name": "p75" },
+            { "name": "p90" },
+            { "name": "p99" }
+          ],
           "user_config": {
             "inference_settings": {
               "onnx": {
@@ -85,12 +112,25 @@
                 "execution_provider": "QNNExecutionProvider",
                 "provider_options": [
                   {
-                    "qnn_context_priority": "high",
-                    "htp_graph_finalization_optimization_mode": "3",
+                    "htp_graph_finalization_optimization_mode": 3,
                     "htp_performance_mode": "burst"
                   }
                 ]
               }
+            }
+          }
+        },
+        {
+          "name": "profile",
+          "type": "custom",
+          "data_config": "metric_data_config",
+          "sub_types": [{ "name": "sampling" }],
+          "user_config": {
+            "user_script": "qnpu_profile.py",
+            "evaluate_func": "qnn_epcontext_profile",
+            "evaluate_func_kwargs": {
+              "data_dir": "data/imagenet_subset/test",
+              "profile_result_path": "imagenet_qnpu_profile.csv"
             }
           }
         }
@@ -104,8 +144,13 @@
       "target_opset": 17,
       "save_as_external_data": true,
       "all_tensors_to_one_file": true,
-      "dynamic": false,
+      "dynamic": true,
       "use_dynamo_exporter": false
+    },
+    "to_fixed_shape": {
+      "type": "DynamicToFixedShape",
+      "dim_param": ["batch_size"],
+      "dim_value": [1]
     },
     "qnn_preprocess": {
       "type": "QNNPreprocess",
@@ -118,11 +163,12 @@
       "quant_preprocess": true,
       "activation_type": "QUInt16",
       "weight_type": "QUInt8"
+    },
+    "jit": {
+      "type": "QNPUEPContextGenerator",
+      "host": "target_system",
+      "optimization_mode": "3",
+      "context_embed_mode": "0"
     }
-  },
-  "evaluator": "common_evaluator",
-  "evaluate_input_model": false,
-  "cache_dir": "temp/cache",
-  "clean_cache": true,
-  "output_dir": "outputs/google/mobilenet_v2"
+  }
 }
