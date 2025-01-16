@@ -1,0 +1,62 @@
+{
+  "input_model": {
+    "type": "PyTorchModel",
+    "model_loader": "load_hf_model",
+    "model_script": "model.py",
+    "model_path": "microsoft/llmlingua-2-xlm-roberta-large-meetingbank",
+    "io_config": {
+      "input_names": ["hidden_states", "attention_mask"],
+      "input_shapes": [
+        [1, 512, 1024],
+        [1, 1, 512, 512]
+      ],
+      "input_types": ["float32", "float32"],
+      "output_names": ["logits"],
+      "output_shapes": [[1, 512, 1024]]
+    }
+  },
+  "systems": {
+    "host_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        {
+          "device": "cpu",
+          "execution_providers": ["CPUExecutionProvider"]
+        }
+      ]
+    },
+    "target_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        {
+          "device": "npu",
+          "execution_providers": ["QNNExecutionProvider"]
+        }
+      ]
+    }
+  },
+  "engine": {
+    "host": "host_system",
+    "target": "target_system"
+  },
+  "passes": {
+    "conversion": {
+      "device": "cpu",
+      "type": "OnnxConversion",
+      "target_opset": 17,
+      "save_as_external_data": true,
+      "all_tensors_to_one_file": true,
+      "dynamic": false,
+      "use_dynamo_exporter": false
+    },
+    "qnn_preprocess": {
+      "type": "QNNPreprocess",
+      "save_as_external_data": true,
+      "all_tensors_to_one_file": true
+    }
+  },
+  "evaluate_input_model": false,
+  "cache_dir": "temp/cache",
+  "clean_cache": true,
+  "output_dir": "outputs/microsoft/llmlingua-2-xlm-roberta-large-meetingbank"
+}
