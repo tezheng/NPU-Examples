@@ -26,6 +26,19 @@
       }
     },
     {
+      "name": "LLMLingua2",
+      "type": "debugpy",
+      "request": "launch",
+      "justMyCode": false,
+      "module": "olive.workflows.run",
+      "args": ["--config", "workflow_encoder.json"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}/models/llm/llmlingua/",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/models/llm/llmlingua/"
+      }
+    },
+    {
       "name": "Python Debugger: Llama QDQ",
       "type": "debugpy",
       "request": "launch",
