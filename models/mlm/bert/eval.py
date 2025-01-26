@@ -112,6 +112,15 @@ def eval_squad(
     )
 
 
+def format_output(data, ratio=100.0):
+    import json
+    return json.loads(
+        json.dumps(data),
+        # Format floats to 2 decimal places
+        parse_float=lambda x: round(float(x) * ratio, 2)
+    )
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -145,7 +154,7 @@ if __name__ == "__main__":
             predictions=logits.argmax(dim=-1),
             references=dataset["label"],
         ) or {}
-        pprint({**accu, **f1})
+        pprint(format_output({**accu, **f1}))
     elif args.task == "qa-squad":
         model_name = "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -160,12 +169,15 @@ if __name__ == "__main__":
             qnpu_model_path=qnpu_model_path,
             input_cols=["question", "context"],
         )
-        pprint(eval_squad(
-            start_logits=outputs.start_logits,
-            end_logits=outputs.end_logits,
-            tokenizer=tokenizer,
-            dataset=dataset,
-            seq_length=512,
+        pprint(format_output(
+            eval_squad(
+                start_logits=outputs.start_logits,
+                end_logits=outputs.end_logits,
+                tokenizer=tokenizer,
+                dataset=dataset,
+                seq_length=512,
+            ),
+            ratio=1.0,
         ))
     elif args.task == "tcl-llmlingua2-meetingbank":
         tokenizer = AutoTokenizer.from_pretrained(
@@ -188,6 +200,9 @@ if __name__ == "__main__":
             qnpu_model_path=qnpu_model_path,
             input_cols=["prompts"],
         )
-        pprint(eval_llmlingua2_tcl(outputs.logits, np.array(dataset["logits"])))
+        pprint(format_output(eval_llmlingua2_tcl(
+            logits=outputs.logits,
+            targets=np.array(dataset["logits"]),
+        )))
     else:
         raise NotImplementedError(f"Unknown task: {args.task}")
