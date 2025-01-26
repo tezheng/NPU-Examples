@@ -26,6 +26,19 @@
       }
     },
     {
+      "name": "Bert QDQ",
+      "type": "debugpy",
+      "request": "launch",
+      "justMyCode": false,
+      "module": "olive.workflows.run",
+      "args": ["--config", "intel_bert_qdq_npu_glue_mrpc.json"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}/models/mlm/bert/",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/models/mlm/bert/"
+      }
+    },
+    {
       "name": "Python Debugger: Llama QDQ",
       "type": "debugpy",
       "request": "launch",
