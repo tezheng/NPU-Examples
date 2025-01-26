@@ -12,12 +12,8 @@ from transformers import (
 from olive.data.component.dataset import BaseDataset
 from olive.data.registry import Registry
 
-from bert_script import bert_tcl_post_process  # noqa: F401
-from bert_common import (
-    SimpleBert,
-    npz_to_hfdataset,
-    tokenize_hfdataset,
-)
+from bert_common import SimpleBert, npz_to_hfdataset, tokenize_hfdataset
+import bert_script  # noqa: F401
 
 
 def create_llmlingua2_tokenizer(model_name: str, max_force_token: int = 100):
@@ -36,7 +32,7 @@ def load_llmlingua2_bert_model(model_name: str) -> torch.nn.Module:
     return model
 
 
-@Registry.register_dataset()
+@ Registry.register_dataset()
 def load_meetingbank_data(
     data_path: str,
     model_name: str,
@@ -70,7 +66,7 @@ def eval_token_classification(
       "r33": 0.33,
     }
 
-    @torch.inference_mode()
+    @ torch.inference_mode()
     def logits_to_label(rate, logits: torch.Tensor) -> torch.Tensor:
         probs = logits.softmax(dim=-1)[:, 1]
         threshold = np.percentile(probs, int(100 * rate + 1))
@@ -79,7 +75,7 @@ def eval_token_classification(
     results = {}
     for key, rate in metrics.items():
         predictions = torch.cat([logits_to_label(rate, p)
-                                for p in outputs.preds])
+                                 for p in outputs.preds])
         references = torch.cat([logits_to_label(rate, t) for t in targets])
         accu_results = accu.compute(
           predictions=predictions,

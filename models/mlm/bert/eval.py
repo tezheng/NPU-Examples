@@ -19,9 +19,13 @@ def inference(
     qnpu_model_path,
     input_cols,
 ):
-    model = QNPUBertForTCL(qnpu_model_path, qnpu_config={
-        "disable_cpu_fallback": "0",
-    })
+    model = QNPUBertForTCL(
+        qnpu_model_path,
+        device="npu",
+        qnpu_config={
+            "disable_cpu_fallback": "0",
+        },
+    )
     tokenized_dataset = tokenize_hfdataset(
         dataset,
         tokenizer,
@@ -38,9 +42,8 @@ def eval_llmlingua2_tcl(logits, targets):
     f1 = load("f1")
     accu = load("accuracy")
     metrics = {
-      "r00": 0.00,
       "r50": 0.50,
-      "r30": 0.30,
+      "r33": 0.33,
     }
 
     def logits_to_label(rate, logits) -> torch.Tensor:
@@ -50,8 +53,7 @@ def eval_llmlingua2_tcl(logits, targets):
 
     results = {}
     for key, rate in metrics.items():
-        predictions = torch.cat([logits_to_label(rate, p)
-                                 for p in logits])
+        predictions = torch.cat([logits_to_label(rate, p) for p in logits])
         references = torch.cat([logits_to_label(rate, torch.from_numpy(t))
                                 for t in targets])
         accu_results = accu.compute(
@@ -136,7 +138,7 @@ if __name__ == "__main__":
         dataset = load_dataset("glue", "mrpc", split="test").select(
             range(args.max_samples))
         qdq_model = "intel/bert_base_uncased_scl"
-        qnpu_model_path = root / "outputs" / qdq_model / "model/model.onnx"
+        qnpu_model_path = root / "outputs" / qdq_model / "output_model/model/model.onnx"
 
         logits = inference(
             tokenizer=tokenizer,
@@ -160,7 +162,7 @@ if __name__ == "__main__":
         dataset = load_dataset("squad", split="validation").select(
             range(args.max_samples))
         qdq_model = "google/bert_large_uncased_qa"
-        qnpu_model_path = root / "outputs" / qdq_model / "model/model.onnx"
+        qnpu_model_path = root / "outputs" / qdq_model / "output_model/model/model.onnx"
 
         outputs = inference(
             tokenizer=tokenizer,
@@ -168,16 +170,14 @@ if __name__ == "__main__":
             qnpu_model_path=qnpu_model_path,
             input_cols=["question", "context"],
         )
-        pprint(format_output(
-            eval_squad(
-                start_logits=outputs.start_logits,
-                end_logits=outputs.end_logits,
-                tokenizer=tokenizer,
-                dataset=dataset,
-                seq_length=512,
-            ),
-            ratio=1.0,
-        ))
+        results = eval_squad(
+            start_logits=outputs.start_logits,
+            end_logits=outputs.end_logits,
+            tokenizer=tokenizer,
+            dataset=dataset,
+            seq_length=512,
+        )
+        pprint(format_output(results, ratio=1.0))
     elif args.task == "tcl-llmlingua2-meetingbank":
         tokenizer = AutoTokenizer.from_pretrained(
             "microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank")
@@ -187,11 +187,12 @@ if __name__ == "__main__":
         )
 
         dataset = npz_to_hfdataset(
-            root / "data/llmlingua2_bert_base_multilingual_cased_meetingbank.npz",
+            root / "data" /
+            "llmlingua2_bert_base_multilingual_cased_meetingbank_tokens.npz",
             max_samples=args.max_samples,
         )
         qdq_model = "microsoft/llmlingua2_bert_base_multilingual_cased"
-        qnpu_model_path = root / "outputs" / qdq_model / "model/model.onnx"
+        qnpu_model_path = root / "outputs" / qdq_model / "output_model/model/model.onnx"
 
         outputs = inference(
             tokenizer=tokenizer,
@@ -199,9 +200,10 @@ if __name__ == "__main__":
             qnpu_model_path=qnpu_model_path,
             input_cols=["prompts"],
         )
-        pprint(format_output(eval_llmlingua2_tcl(
+        results = eval_llmlingua2_tcl(
             logits=outputs.logits,
             targets=np.array(dataset["logits"]),
-        )))
+        )
+        pprint(format_output(results))
     else:
         raise NotImplementedError(f"Unknown task: {args.task}")

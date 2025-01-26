@@ -1,14 +1,15 @@
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, TYPE_CHECKING
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import torch
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-from datasets import Dataset as HFDataset
-
 from transformers import BertModel
 from transformers.modeling_outputs import ModelOutput as _ModelOutput
+
+if TYPE_CHECKING:
+    from datasets import Dataset
+    from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
 @dataclass
@@ -69,7 +70,7 @@ class SimpleBert(torch.nn.Module):
 
 def create_4d_mask(
     mask: torch.Tensor,
-    input_shape: Tuple[int, int],
+    input_shape: Union[torch.Size, Tuple[int, int]],
     masked_value: float = -50.0
 ) -> torch.Tensor:
     # (batch_size, num_heads, seq_len, head_dim)
@@ -79,21 +80,22 @@ def create_4d_mask(
     return inverted_mask.masked_fill(inverted_mask.bool(), masked_value)
 
 
-def npz_to_hfdataset(npz_path: Path, max_samples: int) -> HFDataset:
+def npz_to_hfdataset(npz_path: Path, max_samples: int):
+    from datasets import Dataset
     data_source = np.load(npz_path)
     data = {key: value.tolist()[:max_samples]
             for key, value in data_source.items()}
-    return HFDataset.from_dict(data)
+    return Dataset.from_dict(data)
 
 
 def tokenize_hfdataset(
-    dataset: HFDataset,
-    tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+    dataset: "Dataset",
+    tokenizer: "Union[PreTrainedTokenizer, PreTrainedTokenizerFast]",
     input_cols: List[str],
     label_col: Optional[str] = None,
     seq_length: int = 512,
     max_samples: Optional[int] = None,
-) -> HFDataset:
+):
     def generate_inputs(sample, indices):
         encoded_input = tokenizer(
             *[sample[input_col] for input_col in input_cols],
@@ -110,11 +112,11 @@ def tokenize_hfdataset(
             encoded_input.attention_mask,
             (batch_sz, seq_length),
         )
-        position_ids = torch.arange(seq_length).expand(batch_sz, -1)
+        position_ids = torch.arange(seq_length).expand(batch_sz, -1).long()
         token_type_ids = (
             encoded_input.token_type_ids
             if "token_type_ids" in encoded_input
-            else torch.zeros(seq_length).expand(batch_sz, -1)
+            else torch.zeros(seq_length).expand(batch_sz, -1).long()
         )
 
         return {

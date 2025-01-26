@@ -3,7 +3,7 @@ from transformers import (
 )
 
 from bert_common import SimpleBert
-from bert_script import bert_scl_post_process  # noqa: F401
+import bert_script  # noqa: F401
 
 
 def load_model(model_name: str):

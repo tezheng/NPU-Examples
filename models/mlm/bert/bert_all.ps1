@@ -4,10 +4,10 @@ $configFiles = @("google_bert_qdq_npu_squad.json", "intel_bert_qdq_npu_glue_mrpc
 foreach ($configFile in $configFiles) {
     Write-Host "Running olive with config: $configFile"
 
-    $command = "olive run --config $configFile"
+    $command = "& olive run --config $configFile"
 
     try {
-        & $command
+        Invoke-Expression $command
         # $output = Invoke-Expression $command 2>&1
 
         if ($LASTEXITCODE -ne 0) {
