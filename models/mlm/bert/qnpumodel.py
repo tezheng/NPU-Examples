@@ -11,6 +11,9 @@ from bert_common import ModelOutput
 
 class QNPUModule():
     def __init__(self, model_path: Path, **kwargs) -> None:
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
         disable_cpu_fallback = kwargs.get('disable_cpu_fallback', '1')
         ep_context_enable = kwargs.get('ep_context_enable', '1')
         ep_context_embed = kwargs.get('ep_context_embed', '0')

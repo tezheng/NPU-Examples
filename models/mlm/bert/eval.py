@@ -116,7 +116,6 @@ def format_output(data, ratio=100.0):
     import json
     return json.loads(
         json.dumps(data),
-        # Format floats to 2 decimal places
         parse_float=lambda x: round(float(x) * ratio, 2)
     )
 
