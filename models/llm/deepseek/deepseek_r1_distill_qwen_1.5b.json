@@ -1,0 +1,48 @@
+{
+  "input_model": {
+    "type": "HfModel",
+    "model_path": "deepseek-ai/deepseek-r1-distill-qwen-1.5b",
+    "task": "text-generation"
+  },
+  "engine": {
+    "host": "host_system",
+    "target": "target_system",
+    "cache_dir": "temp/cache",
+    "clean_cache": true,
+    "clean_evaluation_cache": true,
+    "evaluate_input_model": false,
+    "output_dir": "outputs/deepseek/deepseek_r1_distill_qwen_1.5b"
+  },
+  "systems": {
+    "host_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        { "device": "cpu", "execution_providers": ["CPUExecutionProvider"] }
+      ]
+    },
+    "target_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        { "device": "npu", "execution_providers": ["QNNExecutionProvider"] }
+      ]
+    }
+  },
+  "passes": {
+    "conversion": {
+      "device": "cpu",
+      "type": "OnnxConversion",
+      "target_opset": 17,
+      "dynamic": true,
+      "use_dynamo_exporter": false,
+      "save_as_external_data": true,
+      "all_tensors_to_one_file": true
+    },
+    "to_fixed_shape": {
+      "type": "DynamicToFixedShape",
+      "dim_param": ["batch_size", "sequence_length"],
+      "dim_value": [1, 512],
+      "save_as_external_data": true,
+      "all_tensors_to_one_file": true
+    }
+  }
+}

@@ -51,14 +51,14 @@ python ./main.py --all --model-dir /path/to/repo
 
 ```bash
 # use --max-calib-len to specify the maximum length of calibration data, default is 32
-python ./models/llm/llama/main.py --gen_calib_data
+python ./models/llm/llama/main.py --gen-calib-data
 ```
 
 #### Convert PyTorch model to ONNX
 
 ```bash
 # use --skip-prefill or --skip-decode to skip the corresponding part
-python ./models/llm/llama/main.py --convert_to_onnx
+python ./models/llm/llama/main.py --convert-onnx
 ```
 
 #### Quantize ONNX Model
