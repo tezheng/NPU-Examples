@@ -20,7 +20,7 @@ def parse_args():
                       help='Inference using pytorch with cpu, will ignore \
                         other operation flags, --convert-onnx, --quantize-qdq, \
                         etc.')
-  parser.add_argument('--prompt', type=str,
+  parser.add_argument('--prompt', type=str, default=None,
                       help='Override default prompts, use with --inference')
   parser.add_argument('--all', action='store_true', default=False,
                       help='Run all steps')

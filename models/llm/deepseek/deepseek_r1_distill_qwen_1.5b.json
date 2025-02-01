@@ -1,8 +1,38 @@
 {
   "input_model": {
-    "type": "HfModel",
+    "type": "PyTorchModel",
     "model_path": "deepseek-ai/deepseek-r1-distill-qwen-1.5b",
-    "task": "text-generation"
+    "io_config": {
+      "input_names": [
+        "input_ids",
+        "attention_mask",
+        "position_ids",
+        "past_keys",
+        "past_values",
+        "cache_position"
+      ],
+      "input_shapes": [
+        [1, 1],
+        [1, 1, 1, 512],
+        [1, 1],
+        [28, 1, 2, 511, 128],
+        [28, 1, 2, 511, 128],
+        [1]
+      ],
+      "input_types": [
+        "int32",
+        "float32",
+        "int32",
+        "float32",
+        "float32",
+        "int32"
+      ],
+      "output_names": ["logits", "new_past_keys", "new_past_values"],
+      "output_types": ["float32", "float32", "float32"]
+    },
+    "model_loader": "load_model",
+    "model_script": "deepseek_r1_distill.py",
+    "script_dir": "."
   },
   "engine": {
     "host": "host_system",
@@ -27,6 +57,26 @@
       ]
     }
   },
+  "data_configs": [
+    {
+      "name": "calibration_data",
+      "load_dataset_config": {
+        "type": "load_npz_dataset",
+        "data_path": "data/decode.npz",
+        "input_cols": [
+          "input_ids",
+          "attention_mask",
+          "position_ids",
+          "past_keys",
+          "past_values"
+        ],
+        "max_samples": 10
+      },
+      "dataloader_config": { "type": "no_auto_batch_dataloader" },
+      "user_script": "deepseek_r1_distill.py",
+      "script_dir": "."
+    }
+  ],
   "passes": {
     "conversion": {
       "device": "cpu",
@@ -37,10 +87,12 @@
       "save_as_external_data": true,
       "all_tensors_to_one_file": true
     },
-    "to_fixed_shape": {
-      "type": "DynamicToFixedShape",
-      "dim_param": ["batch_size", "sequence_length"],
-      "dim_value": [1, 512],
+    "quantization": {
+      "type": "OnnxStaticQuantization",
+      "data_config": "calibration_data",
+      "quant_preprocess": true,
+      "activation_type": "QUInt16",
+      "weight_type": "QUInt8",
       "save_as_external_data": true,
       "all_tensors_to_one_file": true
     }

@@ -13,33 +13,26 @@ from onnxruntime.quantization import (
 from onnxruntime.quantization.execution_providers import qnn
 from onnxruntime.quantization.shape_inference import quant_pre_process
 
-# import onnxruntime as ort
-# ort.set_default_logger_severity(0)
-# ort.set_default_logger_verbosity(1)
-
 from .util import logger, parse_args
 
 
 class DataReader(CalibrationDataReader):
-  _index = 0
-  _datasize = 0
-
-  def __init__(self, data_path) -> None:
-    self._data = np.load(data_path)
-    self._datasize = min(len(i) for i in self._data.values())
+  def __init__(self, data_path, input_names) -> None:
+    data = {k: v for k, v in np.load(data_path).items() if k in input_names}
+    self._data = [dict(zip(data.keys(), v)) for v in zip(*data.values())]
+    self._index = 0
 
   def get_next(self) -> dict[str, np.ndarray] | None:
-    if self._index < self._datasize:
+    if self._index < len(self):
       self._index += 1
-      return {k: v[self._index - 1] for k, v in self._data.items()
-              if k.startswith('i_')}
+      return self._data[self._index - 1]
     return None
 
   def rewind(self) -> None:
     self._index = 0
 
   def __len__(self):
-    return self._datasize
+    return len(self._data)
 
 
 @dataclass
@@ -59,13 +52,8 @@ def quant(model_path: Path, data_path: Path, output_dir: Path,
     raise FileNotFoundError(
       f"Calib data not found at: {data_path}, generate with --gen-calib-data first")
 
-  for suffix in ['.wu8au16.onnx', '.wu8au16.onnx.data']:
-    file_path = Path(output_dir / model_path.with_suffix(suffix).name)
-    if file_path.exists():
-      logger.warning(f"Remove existing moodel: {file_path}")
-      file_path.unlink()
-
   with TemporaryDirectory(prefix='quant.qdq.') as tmp_dir:
+    if not config.skip_pre_process:
     temp_path = Path(tmp_dir) / 'fused.onnx'
     logger.info(f"QNN pre-processing {model_path} to {temp_path}")
     modified = qnn.qnn_preprocess_model(
@@ -78,34 +66,44 @@ def quant(model_path: Path, data_path: Path, output_dir: Path,
     if modified:
       model_path = temp_path
 
-    if not config.skip_pre_process:
       temp_path = Path(tmp_dir) / 'model.onnx'
       logger.info(f"Quant pre-processing {model_path} to {temp_path}")
       quant_pre_process(
         input_model=model_path,
         output_model_path=temp_path,
         save_as_external_data=True,
+        all_tensors_to_one_file=True,
         external_data_location='model.onnx.data',
       )
       model_path = temp_path
     else:
       logger.info(f"Skip pre-processing {model_path}")
 
+    input_names = ['input_ids', 'attention_mask',
+                   'position_ids', 'past_keys', 'past_values']
     quant_config = qnn.get_qnn_qdq_config(
       model_input=model_path,
-      calibration_data_reader=DataReader(data_path),
+      calibration_data_reader=DataReader(data_path, input_names),
       activation_type=QuantType.QUInt16,
       weight_type=QuantType.QUInt8,
     )
     if config.node_optimization:
       quant_config.nodes_to_exclude = (
-        ['/model/model/rotary_emb/MatMul', '/Concat', '/Concat_1']
-        + [f'/model/model/layers.{i}/self_attn/Expand' for i in range(16)]
-        + [f'/model/model/layers.{i}/self_attn/Expand_1' for i in range(16)]
-        + [f'/model/model/layers.{i}/self_attn/Unsqueeze_2' for i in range(16)]
-        + [f'/model/model/layers.{i}/self_attn/Unsqueeze_3' for i in range(16)]
+        ['/_model/model/rotary_emb/MatMul', '/Concat', '/Concat_1']
+        + [f'/_model/model/layers.{i}/self_attn/{name}'
+           for i in range(28)
+           for name in ["Expand", "Expand_1", "Unsqueeze_2", "Unsqueeze_3"]]
       )
 
+    # quant_config.op_types_to_quantize = ['MatMul']
+
+    for suffix in ['.wu8au16.onnx', '.wu8au16.onnx.data']:
+      file_path = Path(output_dir / model_path.with_suffix(suffix).name)
+      if file_path.exists():
+        logger.warning(f"Remove existing moodel: {file_path}")
+        file_path.unlink()
+
+    # model_path = r"D:\NPU\NPU-Examples\models\llm\deepseek\outputs\deepseek-ai\decoder_pre_processed\model.onnx"
     logger.info(f"QDQ to {model_output} with calib data from {data_path}")
     quantize(
       model_input=model_path,

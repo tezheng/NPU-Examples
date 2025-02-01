@@ -1,5 +1,5 @@
 
-from typing import TypedDict, NotRequired
+from typing import Dict, TypedDict, NotRequired
 
 import numpy as np
 
@@ -127,24 +127,15 @@ class SinkSequence:
     self.head_dim = head_dim
 
   def prompt(self, input_tokens: list[int]) -> InferInput:
-    def flatten(container):
-      for i in container:
-        if isinstance(i, (list, tuple)):
-          yield from flatten(i)
-        else:
-          yield i
-
     # TODO: warning if input_tokens exceed seq_len
     if not input_tokens:
       raise RuntimeError('Please prompt with at least one token')
 
-    self._input_tokens = list(flatten(input_tokens))
+    self._input_tokens = input_tokens
     self._output_tokens = []
     return self._input_tensors(self.seq_len)
 
   def token(self, new_token: int) -> InferInput:
-    if not self._input_tokens:
-      raise RuntimeError('Please prompt first before token')
     if self.full:
       raise RuntimeError('Context is full, cannot append more tokens')
 
@@ -195,3 +186,29 @@ class SinkSequence:
   @property
   def full(self) -> bool:
     return len(self._input_tokens) + len(self._output_tokens) >= self.ctx_len
+
+
+class SinkCache:
+  def __init__(self, seq: SinkSequence) -> None:
+    self.shape = (
+        seq.num_layers,
+        seq.batch_size,
+        seq.num_heads,
+        seq.ctx_len,
+        seq.head_dim,
+    )
+    self.past_keys = np.zeros(self.shape, dtype=np.float32)
+    self.past_values = np.zeros(self.shape, dtype=np.float32)
+
+  def update(self, new_keys: np.ndarray, new_values: np.ndarray) -> None:
+    assert new_keys.shape == self.shape, f"Shapes do not match: {new_keys.shape} != {self.shape}"
+    self.past_keys = new_keys
+    self.past_values = new_values
+
+  def slice(self, tokens: int = 1) -> Dict[str, np.ndarray]:
+    return {
+      'past_keys': self.past_keys[:, :, :, tokens:, :],
+      'past_values': self.past_values[:, :, :, tokens:, :],
+      'cache_position': np.arange(
+          self.shape[3] - tokens, self.shape[3], dtype=np.int32),
+    }
