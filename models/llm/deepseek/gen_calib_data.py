@@ -7,7 +7,7 @@ import torch
 
 from .model import (
   ModelOutput,
-  Qwen2WithKVCache,
+  Qwen2WithKVCache2 as Qwen2WithKVCache,
   TwoStagesMixin,
 )
 from .util import logger
@@ -38,7 +38,6 @@ class CalibDataMixin(TwoStagesMixin):
       **{k: v.numpy(force=True) for k, v in inputs.items()},
       **{k: v.numpy(force=True) for k, v in outputs.items()},
     })
-    self._prefill_len = inputs['position_ids'].max()
     return token, outputs
 
   def decode(self, inputs: Dict[str, torch.Tensor]) -> Tuple[int, ModelOutput]:
@@ -48,9 +47,7 @@ class CalibDataMixin(TwoStagesMixin):
       **{k: v.numpy(force=True) for k, v in outputs.items()},
     })
 
-    generated_len = inputs['position_ids'].max() - self._prefill_len
-    max_samples = self.calib_cfg.max_samples
-    if self.is_full or generated_len >= max_samples:
+    if self.is_full or len(self._decode_data) >= self.calib_cfg.max_samples:
       token = self.eos_token_id
 
     return token, outputs
@@ -91,7 +88,8 @@ class CalibDataGenerator(Qwen2WithKVCache, CalibDataMixin):
       allow_pickle=False,
       **{k: np.stack([i[k] for i in data]) for k in data[0]}
     )
-    logger.info(f"Calibration data saved to {file_path}")
+    logger.info(
+      f"Calibration data saved to {file_path}, keys: {data[0].keys()}")
 
 
 if __name__ == '__main__':

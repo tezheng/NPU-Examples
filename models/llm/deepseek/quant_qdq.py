@@ -43,7 +43,7 @@ class QuantizationConfig:
 
 def quant(model_path: Path, data_path: Path, output_dir: Path,
           config=QuantizationConfig()):
-  model_suffix = '.w8a8.onnx'
+  model_suffix = '.wu8au16.onnx'
   model_output = output_dir / model_path.with_suffix(model_suffix).name
 
   if not model_path.exists():
@@ -80,8 +80,8 @@ def quant(model_path: Path, data_path: Path, output_dir: Path,
     else:
       logger.info(f"Skip pre-processing {model_path}")
 
-    input_names = ['input_ids', 'attention_mask',
-                   'position_ids', 'past_keys', 'past_values']
+    input_names = ['inputs_embeds', 'attention_mask',
+                   'past_keys', 'past_values', 'position_sin', 'position_cos']
     quant_config = qnn.get_qnn_qdq_config(
       model_input=model_path,
       calibration_data_reader=DataReader(data_path, input_names),
@@ -97,6 +97,7 @@ def quant(model_path: Path, data_path: Path, output_dir: Path,
       )
 
     # quant_config.op_types_to_quantize = ['MatMul']
+    # quant_config.quant_format = QuantFormat.QOperator
 
     for suffix in [model_suffix, model_suffix + '.data']:
       file_path = Path(output_dir / model_path.with_suffix(suffix).name)

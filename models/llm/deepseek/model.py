@@ -8,8 +8,7 @@ import torch
 from transformers import (
   AutoTokenizer,
   AutoConfig,
-  Qwen2ForCausalLM,
-  Qwen2Model,
+  AutoModelForCausalLM,
 )
 from transformers.cache_utils import DynamicCache
 from transformers.modeling_outputs import ModelOutput as _ModelOutput
@@ -56,9 +55,11 @@ class StaticShapeCache(DynamicCache):
 
 
 class Qwen2Block(torch.nn.Module):
-  def __init__(self, model: Qwen2ForCausalLM) -> None:
+  _model: torch.nn.Module
+
+  def __init__(self, model: AutoModelForCausalLM) -> None:
     super().__init__()
-    self._model = model
+    self._model = model  # type: ignore
 
   @torch.inference_mode()
   def forward(
@@ -78,6 +79,7 @@ class Qwen2Block(torch.nn.Module):
         (past_keys, past_values)),
       cache_position=cache_position,
       use_cache=True,
+      num_logits_to_keep=1,
     )
     new_keys, new_values = outputs.past_key_values.to_legacy_cache()
 
@@ -89,9 +91,9 @@ class Qwen2Block(torch.nn.Module):
 
 
 class Qwen2Attention(torch.nn.Module):
-  def __init__(self, model: Qwen2Model) -> None:
+  def __init__(self, model: AutoModelForCausalLM) -> None:
     super().__init__()
-    self.layers = model.layers
+    self._layers = model.model.layers  # type: ignore
 
   @torch.inference_mode()
   def forward(
@@ -106,7 +108,7 @@ class Qwen2Attention(torch.nn.Module):
     past_key_values = StaticShapeCache.from_legacy_cache(
       (past_keys, past_values))
     hidden_states = inputs_embeds
-    for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+    for decoder_layer in self._layers:
       layer_outputs = decoder_layer(
           hidden_states,
           attention_mask=attention_mask,
@@ -210,7 +212,7 @@ class TwoStagesMixin(ABC):
     pass
 
 
-class CausalLMIOMixin(ABC):
+class ModelIOMixin(ABC):
   def process_input(
     self,
     inputs: Dict[str, torch.Tensor],
@@ -220,21 +222,27 @@ class CausalLMIOMixin(ABC):
   def process_output(self, outputs: ModelOutput) -> ModelOutput:
     return outputs
 
+  @property
+  @abstractmethod
+  def causal_model(self) -> torch.nn.Module:
+    pass
 
-class Qwen2WithKVCache(CausalLMSequence, TwoStagesMixin, CausalLMIOMixin):
+
+class CausalLMWithKVCache(CausalLMSequence, TwoStagesMixin, ModelIOMixin):
   _streaming: bool = True
 
   def __init__(self, model_name: str,
                use_streaming: bool = True, **kwargs) -> None:
     super().__init__(model_name)
-    self._causal_model = Qwen2ForCausalLM.from_pretrained(model_name)
-    self._model = Qwen2Block(self._causal_model)
+    self._causal_model = AutoModelForCausalLM.from_pretrained(model_name)
     self._streaming = use_streaming
 
   def run(self, prompt: str) -> Tuple[str, int]:
-    new_token, _ = self.prefill(self.prompt(prompt))
+    inputs = self.process_input(self.prompt(prompt))
+    new_token, _ = self.prefill(inputs)
     while (new_token != self.eos_token_id and not self.is_full):
-      new_token, _ = self.decode(self.token(new_token))
+      inputs = self.process_input(self.token(new_token))
+      new_token, _ = self.decode(inputs)
     if self._streaming:
       print('\n')
     return (
@@ -246,12 +254,70 @@ class Qwen2WithKVCache(CausalLMSequence, TwoStagesMixin, CausalLMIOMixin):
     self,
     inputs: Dict[str, torch.Tensor],
   ) -> Tuple[int, ModelOutput]:
-    output = self._model(**inputs)
-    logits, new_keys, new_values = output.values()
+    model_outputs = self.model(**inputs)
+    outputs = self.process_output(model_outputs)
+    logits, new_keys, new_values = outputs.values()
     new_token = int(torch.argmax(logits, dim=-1).item())
     self.update_kvcache(new_keys, new_values)
 
     if self._streaming:
       print(self._tokenizer.decode(new_token), end='', flush=True)
 
-    return new_token, output
+    return new_token, outputs
+
+  @property
+  def causal_model(self) -> AutoModelForCausalLM:
+    return self._causal_model
+
+  @property
+  @abstractmethod
+  def model(self) -> torch.nn.Module:
+    pass
+
+
+class Qwen2WithKVCache(CausalLMWithKVCache):
+  def __init__(self, model_name: str, **kwargs) -> None:
+    super().__init__(model_name, **kwargs)
+    self._model = Qwen2Block(self.causal_model)
+
+  @property
+  def model(self) -> Qwen2Block:
+    return self._model
+
+
+class DecodeLayerIOMixin(ModelIOMixin):
+  def process_input(
+    self,
+    inputs: Dict[str, torch.Tensor],
+  ) -> Dict[str, torch.Tensor]:
+    model = self.causal_model.model
+    inputs_embeds = model.embed_tokens(inputs['input_ids'])
+    position_embeddings = model.rotary_emb(
+      inputs_embeds, inputs['position_ids'])
+    return {
+      'inputs_embeds': inputs_embeds,
+      'attention_mask': inputs['attention_mask'],
+      'past_keys': inputs['past_keys'],
+      'past_values': inputs['past_values'],
+      'position_sin': position_embeddings[0],
+      'position_cos': position_embeddings[1],
+    }
+
+  def process_output(self, outputs: ModelOutput) -> ModelOutput:
+    hidden_states = self.causal_model.model.norm(outputs['hidden_states'])
+    logits = self.causal_model.lm_head(hidden_states[:, -1:, :])
+    return ModelOutput(
+      logits=logits[:, -1, :],
+      new_keys=outputs['new_keys'],
+      new_values=outputs['new_values'],
+    )
+
+
+class Qwen2WithKVCache2(CausalLMWithKVCache, TwoStagesMixin, DecodeLayerIOMixin):
+  def __init__(self, model_name: str, **kwargs) -> None:
+    super().__init__(model_name, **kwargs)
+    self._model = Qwen2Attention(self.causal_model)
+
+  @property
+  def model(self) -> Qwen2Attention:
+    return self._model

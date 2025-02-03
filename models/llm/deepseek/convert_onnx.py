@@ -8,7 +8,7 @@ import onnx
 import torch
 
 from .model import (
-  Qwen2WithKVCache,
+  Qwen2WithKVCache2 as Qwen2WithKVCache,
   ModelOutput,
   TwoStagesMixin,
 )
@@ -69,11 +69,11 @@ class ConvertONNX(Qwen2WithKVCache, ConvertONNXMixin):
 
   def export(self, model_dir: Path) -> None:
     if not self.convert_cfg.skip_prefill:
-      self._convert_onnx(self._model, model_dir /
+      self._convert_onnx(self.model, model_dir /
                          'prefill.onnx', self.prefill_input)
 
     if not self.convert_cfg.skip_decode:
-      self._convert_onnx(self._model, model_dir /
+      self._convert_onnx(self.model, model_dir /
                          'decode.onnx', self.decode_input)
 
   def _convert_onnx(self, model: torch.nn.Module, model_path: Path,

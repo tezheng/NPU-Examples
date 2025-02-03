@@ -1,11 +1,12 @@
-from typing import List
+import torch
+from typing import List, Dict
 from pathlib import Path
 
 from time import perf_counter_ns
 
 import numpy as np
 import onnxruntime as ort
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, Qwen2ForCausalLM
 
 from sequence import SinkSequence, SinkCache
 
@@ -223,6 +224,89 @@ class Decoder:
     return token, end_ts - start_ts
 
 
+class DecodeLayerIOMixin():
+  def process_input(
+    self,
+    inputs: Dict[str, torch.Tensor],
+  ) -> Dict[str, torch.Tensor]:
+    model = self.causal_model.model
+    inputs_embeds = model.embed_tokens(torch.from_numpy(inputs['input_ids']))
+    position_embeddings = model.rotary_emb(
+      inputs_embeds, torch.from_numpy(inputs['position_ids']))
+    return {
+      'inputs_embeds': inputs_embeds.numpy(force=True),
+      'attention_mask': inputs['attention_mask'],
+      'position_sin': position_embeddings[0].numpy(force=True),
+      'position_cos': position_embeddings[1].numpy(force=True),
+    }
+
+  def process_output(self, hidden_states):
+    hidden_states = self.causal_model.model.norm(
+      torch.from_numpy(hidden_states))
+    logits = self.causal_model.lm_head(hidden_states[:, -1:, :])
+    return logits[:, -1, :].numpy(force=True)
+
+
+class DecoderLayers(DecodeLayerIOMixin):
+  def __init__(
+      self, model_name: str, model_path: Path, profile: bool, device="npu"
+  ) -> None:
+    self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+    self.causal_model = Qwen2ForCausalLM.from_pretrained(model_name)
+    self._decoder = init_ort_session(model_path, profile=profile, device=device)
+    self._seq = SinkSequence(num_layers=28, num_heads=2, head_dim=128)
+    self._kvcache = SinkCache(self._seq)
+    self._input_names = [i.name for i in self._decoder.get_inputs()]
+
+  def generate(self, prompt: str) -> str:
+    # CoT
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": prompt},
+    ]
+    input_ids: List[int] = self._tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        max_length=self._seq.ctx_len,
+        truncation=True,
+    )  # type: ignore
+
+    prefill_ellapse = []
+    for token in input_ids:
+      new_token, decode_ts = self.predict(token)
+      prefill_ellapse.append(decode_ts)
+
+    decode_ellapse = []
+    while new_token != self._tokenizer.eos_token_id and not self._seq.full:
+      print(self._tokenizer.decode(new_token), end="", flush=True)
+      new_token, decode_ts = self.predict(new_token)
+      decode_ellapse.append(decode_ts)
+
+    print(self._tokenizer.decode(new_token), end="", flush=True)
+    print("\n")
+    print(f"Prefill Latency: {np.sum(prefill_ellapse) / 1e6: .2f}ms")
+    print(
+        f"Decode Throughput(Tokens={len(decode_ellapse)}): {1e9 / np.mean(decode_ellapse):.2f} tok/s"
+    )
+    return "".join(self._tokenizer.batch_decode(self._seq.generated_tokens))
+
+  def predict(self, new_token: int) -> tuple[int, int]:
+    inputs = self._seq.token(new_token)
+    caches = self._kvcache.slice(inputs["input_ids"].shape[-1])
+    input_feed = {k: v for k, v in (self.process_input(inputs) | caches).items()
+                  if k in self._input_names}
+
+    start_ts = perf_counter_ns()
+    hidden_states, new_keys, new_values = self._decoder.run(None, input_feed)
+    logits = self.process_output(hidden_states)
+    end_ts = perf_counter_ns()
+
+    token = np.argmax(logits, axis=-1)[0]
+    self._kvcache.update(new_keys=new_keys, new_values=new_values)
+
+    return token, end_ts - start_ts
+
+
 def parse_args():
   import argparse
 
@@ -255,7 +339,7 @@ if __name__ == "__main__":
   model_path = args.model_dir / \
       "outputs/deepseek/deepseek_r1_distill_qwen_1.5b/model/model.onnx"
   model_path = args.model_dir / "outputs" / args.model_name / args.model_file
-  session = Decoder(
+  session = DecoderLayers(
       model_name=args.model_name,
       model_path=model_path,
       profile=args.profile,

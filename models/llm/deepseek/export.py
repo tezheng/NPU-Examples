@@ -1,7 +1,7 @@
 import sys
 from dataclasses import asdict
 
-from .model import Qwen2WithKVCache
+from .model import Qwen2WithKVCache2 as Qwen2WithKVCache
 from .gen_calib_data import CalibDataGenerator, CalibConfig
 from .convert_onnx import ConvertONNX
 from .quant_qdq import QuantizationConfig, quant
