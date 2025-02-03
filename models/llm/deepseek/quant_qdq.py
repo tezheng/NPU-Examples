@@ -54,17 +54,17 @@ def quant(model_path: Path, data_path: Path, output_dir: Path,
 
   with TemporaryDirectory(prefix='quant.qdq.') as tmp_dir:
     if not config.skip_pre_process:
-    temp_path = Path(tmp_dir) / 'fused.onnx'
-    logger.info(f"QNN pre-processing {model_path} to {temp_path}")
-    modified = qnn.qnn_preprocess_model(
-        model_path,
-        temp_path,
-        fuse_layernorm=True,
-        save_as_external_data=True,
-        all_tensors_to_one_file=True,
-    )
-    if modified:
-      model_path = temp_path
+      temp_path = Path(tmp_dir) / 'fused.onnx'
+      logger.info(f"QNN pre-processing {model_path} to {temp_path}")
+      modified = qnn.qnn_preprocess_model(
+          model_path,
+          temp_path,
+          fuse_layernorm=True,
+          save_as_external_data=True,
+          all_tensors_to_one_file=True,
+      )
+      if modified:
+        model_path = temp_path
 
       temp_path = Path(tmp_dir) / 'model.onnx'
       logger.info(f"Quant pre-processing {model_path} to {temp_path}")

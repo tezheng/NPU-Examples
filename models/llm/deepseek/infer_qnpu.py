@@ -237,6 +237,7 @@ def parse_args():
       help="HF hub model to initialize tokenizer",
   )
   parser.add_argument("--model-dir", type=Path, default=default_model_dir)
+  parser.add_argument("--model-file", type=str, default="model.onnx")
   parser.add_argument("--prompt", type=str,
                       default="Who is the first astronaut walking on the moon?")
   parser.add_argument("--profile", action="store_true", default=False)
@@ -253,7 +254,7 @@ if __name__ == "__main__":
 
   model_path = args.model_dir / \
       "outputs/deepseek/deepseek_r1_distill_qwen_1.5b/model/model.onnx"
-  model_path = args.model_dir / "outputs" / args.model_name / "decode.onnx"
+  model_path = args.model_dir / "outputs" / args.model_name / args.model_file
   session = Decoder(
       model_name=args.model_name,
       model_path=model_path,
