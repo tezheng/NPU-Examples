@@ -25,7 +25,7 @@ Who is the first female astronaut to walk on the moon?<|eot_id|>
     'input': '''<|start_header_id|>system<|end_header_id|>
 You are a American history expert.<|eot_id|>
 <|start_header_id|>user<|end_header_id|>
-Who is the first presedent of United States?<|eot_id|>
+Who is the first president of United States?<|eot_id|>
 <|start_header_id|>assistant<|end_header_id|>''',
     'output': 'The first President of the United States was George Washington. \
                He was inaugurated on April 30, 1789, and served two terms in \

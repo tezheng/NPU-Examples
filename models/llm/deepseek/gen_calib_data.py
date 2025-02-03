@@ -105,7 +105,7 @@ if __name__ == '__main__':
   prompt = (
     args.prompt
     if args.prompt is not None
-    else 'Who is the first presedent of United States?'
+    else 'Who is the first president of United States?'
   )
   logger.info(f"Prompt:\n{prompt}")
 

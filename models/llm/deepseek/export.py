@@ -15,7 +15,7 @@ ground_truth = [{
                spacecraft on June 16, 1963, and spent almost three days in \
                space, becoming the first woman to journey into outer space.',
    }, {
-    'input': 'Who is the first presedent of United States?',
+    'input': 'Who is the first president of United States?',
     'output': 'The first President of the United States was George Washington. \
                He was inaugurated on April 30, 1789, and served two terms in \
                office until March 4, 1797.',
