@@ -20,17 +20,17 @@ from .util import logger, parse_args
 class ConversionConfig:
   skip_prefill: bool = False
   skip_decode: bool = False
-  max_calib_len: int = 32
+  max_samples: int = 32
 
 
 class CalibDataMixin(TwoStagesMixin):
   _prefill_data: list[dict[str, np.ndarray]] = []
   _decode_data: list[dict[str, np.ndarray]] = []
-  _max_calib_len: int = 16
+  _max_samples: int = 16
 
-  def __init__(self, max_calib_len: int = 16, **kwargs):
+  def __init__(self, max_samples: int = 16, **kwargs):
     super().__init__()
-    self._max_calib_len = max_calib_len
+    self._max_samples = max_samples
 
   def prefill(self,
               inputs: dict[str, torch.Tensor]) -> tuple[int, LogitsWithPast]:
@@ -50,7 +50,7 @@ class CalibDataMixin(TwoStagesMixin):
       **{f'o_{k}': v.numpy(force=True) for k, v in outputs.items()},
     })
 
-    if inputs['position_ids'].max() - self._prefill_len >= self._max_calib_len:
+    if inputs['position_ids'].max() - self._prefill_len >= self._max_samples:
       token = self.eos_token_id
 
     return token, outputs
@@ -231,7 +231,7 @@ Who is the first presedent of United States?<|eot_id|>
   config = ConversionConfig(
     skip_prefill=args.skip_prefill,
     skip_decode=args.skip_decode,
-    max_calib_len=args.max_calib_len,
+    max_samples=args.max_samples,
   )
 
   if args.inference:

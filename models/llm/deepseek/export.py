@@ -36,7 +36,7 @@ def export():
   print(f"Data dir: {data_dir}")
 
   conv_cfg = CalibConfig(
-    max_calib_len=args.max_calib_len,
+    max_samples=args.max_samples,
     skip_prefill=args.skip_prefill,
     skip_decode=args.skip_decode,
   )

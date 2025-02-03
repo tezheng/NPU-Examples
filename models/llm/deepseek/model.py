@@ -7,8 +7,9 @@ import torch
 
 from transformers import (
   AutoTokenizer,
-  Qwen2Config,
+  AutoConfig,
   Qwen2ForCausalLM,
+  Qwen2Model,
 )
 from transformers.cache_utils import DynamicCache
 from transformers.modeling_outputs import ModelOutput as _ModelOutput
@@ -87,16 +88,54 @@ class Qwen2Block(torch.nn.Module):
     )
 
 
-class CausalLMWithKVCache:
+class Qwen2Attention(torch.nn.Module):
+  def __init__(self, model: Qwen2Model) -> None:
+    super().__init__()
+    self.layers = model.layers
+
+  @torch.inference_mode()
+  def forward(
+    self,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor,
+    past_keys: torch.Tensor,
+    past_values: torch.Tensor,
+    position_sin: torch.Tensor,
+    position_cos: torch.Tensor,
+  ) -> ModelOutput:
+    past_key_values = StaticShapeCache.from_legacy_cache(
+      (past_keys, past_values))
+    hidden_states = inputs_embeds
+    for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+      layer_outputs = decoder_layer(
+          hidden_states,
+          attention_mask=attention_mask,
+          past_key_value=past_key_values,
+          position_embeddings=(position_sin, position_cos),
+          use_cache=True,
+      )
+      hidden_states = layer_outputs[0]
+
+    new_keys, new_values = past_key_values.to_legacy_cache()
+
+    return ModelOutput(
+      hidden_states=hidden_states,
+      new_keys=new_keys,
+      new_values=new_values,
+    )
+
+
+class CausalLMSequence:
   def __init__(self, model_name: str) -> None:
     from sequence import SinkSequence, SinkCache
 
     self._tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model_config = Qwen2Config.from_pretrained(model_name)
+
+    model_cfg = AutoConfig.from_pretrained(model_name)
     self._sequence = SinkSequence(
-      num_heads=model_config.num_key_value_heads,
-      num_layers=model_config.num_hidden_layers,
-      head_dim=model_config.hidden_size // model_config.num_attention_heads,
+      num_heads=model_cfg.num_key_value_heads,
+      num_layers=model_cfg.num_hidden_layers,
+      head_dim=model_cfg.hidden_size // model_cfg.num_attention_heads,
     )
     self._kvcache = SinkCache(self._sequence)
 
@@ -171,13 +210,25 @@ class TwoStagesMixin(ABC):
     pass
 
 
-class Qwen2WithKVCache(CausalLMWithKVCache, TwoStagesMixin):
+class CausalLMIOMixin(ABC):
+  def process_input(
+    self,
+    inputs: Dict[str, torch.Tensor],
+  ) -> Dict[str, torch.Tensor]:
+    return inputs
+
+  def process_output(self, outputs: ModelOutput) -> ModelOutput:
+    return outputs
+
+
+class Qwen2WithKVCache(CausalLMSequence, TwoStagesMixin, CausalLMIOMixin):
   _streaming: bool = True
 
   def __init__(self, model_name: str,
                use_streaming: bool = True, **kwargs) -> None:
     super().__init__(model_name)
-    self._model = Qwen2Block(Qwen2ForCausalLM.from_pretrained(model_name))
+    self._causal_model = Qwen2ForCausalLM.from_pretrained(model_name)
+    self._model = Qwen2Block(self._causal_model)
     self._streaming = use_streaming
 
   def run(self, prompt: str) -> Tuple[str, int]:

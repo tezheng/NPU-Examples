@@ -43,7 +43,8 @@ class QuantizationConfig:
 
 def quant(model_path: Path, data_path: Path, output_dir: Path,
           config=QuantizationConfig()):
-  model_output = output_dir / model_path.with_suffix('.wu8au16.onnx').name
+  model_suffix = '.w8a8.onnx'
+  model_output = output_dir / model_path.with_suffix(model_suffix).name
 
   if not model_path.exists():
     raise FileNotFoundError(
@@ -97,10 +98,10 @@ def quant(model_path: Path, data_path: Path, output_dir: Path,
 
     # quant_config.op_types_to_quantize = ['MatMul']
 
-    for suffix in ['.wu8au16.onnx', '.wu8au16.onnx.data']:
+    for suffix in [model_suffix, model_suffix + '.data']:
       file_path = Path(output_dir / model_path.with_suffix(suffix).name)
       if file_path.exists():
-        logger.warning(f"Remove existing moodel: {file_path}")
+        logger.warning(f"Remove existing model: {file_path}")
         file_path.unlink()
 
     # model_path = r"D:\NPU\NPU-Examples\models\llm\deepseek\outputs\deepseek-ai\decoder_pre_processed\model.onnx"

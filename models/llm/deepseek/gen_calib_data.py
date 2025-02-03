@@ -15,14 +15,14 @@ from .util import logger
 
 @dataclass
 class CalibConfig:
-  max_calib_len: int = 16
+  max_samples: int = 16
   skip_prefill: bool = False
   skip_decode: bool = False
 
   @classmethod
   def from_kwargs(cls, kwargs) -> 'CalibConfig':
     return cls(
-      max_calib_len=kwargs.pop('max_calib_len', 16),
+      max_samples=kwargs.pop('max_samples', 16),
       skip_prefill=kwargs.pop('skip_prefill', False),
       skip_decode=kwargs.pop('skip_decode', False),
     )
@@ -49,8 +49,8 @@ class CalibDataMixin(TwoStagesMixin):
     })
 
     generated_len = inputs['position_ids'].max() - self._prefill_len
-    max_calib_len = self.calib_cfg.max_calib_len
-    if self.is_full or generated_len >= max_calib_len:
+    max_samples = self.calib_cfg.max_samples
+    if self.is_full or generated_len >= max_samples:
       token = self.eos_token_id
 
     return token, outputs
@@ -112,7 +112,7 @@ if __name__ == '__main__':
   config = CalibConfig(
     skip_prefill=args.skip_prefill,
     skip_decode=args.skip_decode,
-    max_calib_len=args.max_calib_len,
+    max_samples=args.max_samples,
   )
 
   calib_data_gen = CalibDataGenerator(model_name, **asdict(config))

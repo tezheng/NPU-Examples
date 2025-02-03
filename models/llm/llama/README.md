@@ -50,7 +50,7 @@ python ./main.py --all --model-dir /path/to/repo
 #### Generate Calibration Data
 
 ```bash
-# use --max-calib-len to specify the maximum length of calibration data, default is 32
+# use --max-samples to specify the maximum length of calibration data, default is 32
 python ./models/llm/llama/main.py --gen-calib-data
 ```
 

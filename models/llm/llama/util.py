@@ -28,7 +28,7 @@ def parse_args():
   parser.add_argument('--gen-calib-data', action='store_true', default=False)
   parser.add_argument('--quantize-qdq', action='store_true', default=False)
   parser.add_argument('--use-streaming', action='store_true', default=True)
-  parser.add_argument('--max-calib-len', type=int, default=32,
+  parser.add_argument('--max-samples', type=int, default=32,
                       help='Number of tokens to persist for calibration')
   parser.add_argument('--skip-prefill', action='store_true', default=False)
   parser.add_argument('--skip-decode', action='store_true', default=False)

@@ -8,7 +8,6 @@ import onnx
 import torch
 
 from .model import (
-  Qwen2Block,
   Qwen2WithKVCache,
   ModelOutput,
   TwoStagesMixin,
@@ -64,9 +63,9 @@ class ConvertONNXMixin(TwoStagesMixin):
 
 
 class ConvertONNX(Qwen2WithKVCache, ConvertONNXMixin):
-  def __init__(self, **kwargs) -> None:
+  def __init__(self, model_name: str, **kwargs) -> None:
     self.convert_cfg = ConversionConfig.from_kwargs(kwargs)
-    super().__init__(**kwargs, use_streaming=False)
+    super().__init__(model_name, **kwargs, use_streaming=False)
 
   def export(self, model_dir: Path) -> None:
     if not self.convert_cfg.skip_prefill:
@@ -77,9 +76,9 @@ class ConvertONNX(Qwen2WithKVCache, ConvertONNXMixin):
       self._convert_onnx(self._model, model_dir /
                          'decode.onnx', self.decode_input)
 
-  def _convert_onnx(self, model: Qwen2Block, model_path: Path,
+  def _convert_onnx(self, model: torch.nn.Module, model_path: Path,
                     sample: ConvertONNXMixin.ModuleIO):
-    with TemporaryDirectory(prefix='llama.to.onnx.') as tmp_path:
+    with TemporaryDirectory(prefix='qwen2.to.onnx.') as tmp_path:
       tmp_model = Path(tmp_path) / 'model.onnx'
 
       logger.info(f"Exporting pytorch model to {tmp_model}")
