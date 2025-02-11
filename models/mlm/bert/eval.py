@@ -8,34 +8,33 @@ from datasets import load_dataset
 from transformers import AutoTokenizer
 
 from bert_common import npz_to_hfdataset, tokenize_hfdataset
-from qnpumodel import (
-    QNPUBertForTokenClassification as QNPUBertForTCL,
-)
+from ovomodel import OVOBertModel as NPUBertModel
 
 
 def inference(
     tokenizer,
     dataset,
-    qnpu_model_path,
+    npu_model_path,
     input_cols,
+    device="npu",
 ):
-    model = QNPUBertForTCL(
-        qnpu_model_path,
-        device="npu",
-        qnpu_config={
-            "disable_cpu_fallback": "0",
+    bert = NPUBertModel(
+        npu_model_path,
+        device=device,
+        npu_config={
+            "disable_cpu_fallback": "1",
         },
     )
     tokenized_dataset = tokenize_hfdataset(
         dataset,
         tokenizer,
         input_cols=input_cols,
-        seq_length=model.qnpu_session.sequence_length,
+        seq_length=bert.model.sequence_length,
     )
 
     inputs = {col: tokenized_dataset[col]
               for col in tokenized_dataset.column_names}
-    return model(**inputs)
+    return bert(**inputs)
 
 
 def eval_llmlingua2_tcl(logits, targets):
@@ -128,6 +127,7 @@ if __name__ == "__main__":
     root = Path(__file__).resolve().parent
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--device", type=str, default="npu")
     parser.add_argument("--task", type=str, default="scl-glue-mrpc")
     parser.add_argument("--max-samples", type=int, default=100)
     args = parser.parse_args()
@@ -138,13 +138,14 @@ if __name__ == "__main__":
         dataset = load_dataset("glue", "mrpc", split="test").select(
             range(args.max_samples))
         qdq_model = "intel/bert_base_uncased_scl"
-        qnpu_model_path = root / "outputs" / qdq_model / "output_model/model/model.onnx"
+        npu_model_path = root / "outputs" / qdq_model / "model/model.onnx"
 
         logits = inference(
             tokenizer=tokenizer,
             dataset=dataset,
-            qnpu_model_path=qnpu_model_path,
+            npu_model_path=npu_model_path,
             input_cols=["sentence1", "sentence2"],
+            device=args.device,
         )[0]
 
         accu = load("accuracy").compute(
@@ -162,12 +163,12 @@ if __name__ == "__main__":
         dataset = load_dataset("squad", split="validation").select(
             range(args.max_samples))
         qdq_model = "google/bert_large_uncased_qa"
-        qnpu_model_path = root / "outputs" / qdq_model / "output_model/model/model.onnx"
+        npu_model_path = root / "outputs" / qdq_model / "model/model.onnx"
 
         outputs = inference(
             tokenizer=tokenizer,
             dataset=dataset,
-            qnpu_model_path=qnpu_model_path,
+            npu_model_path=npu_model_path,
             input_cols=["question", "context"],
         )
         results = eval_squad(
@@ -192,12 +193,12 @@ if __name__ == "__main__":
             max_samples=args.max_samples,
         )
         qdq_model = "microsoft/llmlingua2_bert_base_multilingual_cased"
-        qnpu_model_path = root / "outputs" / qdq_model / "output_model/model/model.onnx"
+        npu_model_path = root / "outputs" / qdq_model / "model/model.onnx"
 
         outputs = inference(
             tokenizer=tokenizer,
             dataset=dataset,
-            qnpu_model_path=qnpu_model_path,
+            npu_model_path=npu_model_path,
             input_cols=["prompts"],
         )
         results = eval_llmlingua2_tcl(
