@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from transformers import Qwen2ForCausalLM
+from transformers import AutoModelForCausalLM
 
 from olive.data.registry import Registry
 
@@ -12,7 +12,7 @@ from model import Qwen2Block
 
 
 def load_model(model_name: str):
-  model = Qwen2ForCausalLM.from_pretrained(model_name)
+  model = AutoModelForCausalLM.from_pretrained(model_name)
   model.eval()
   return Qwen2Block(model)
 
@@ -43,7 +43,17 @@ def load_npz_dataset(data_path: str, input_cols: List[str],
   return DictDataset(data, list(range(max_samples)))
 
 
-# load_npz_dataset(Path(__file__).parent / "outputs/data/decode.npz", 10)
+# load_npz_dataset(
+#   Path(__file__).parent / "data/decode.npz",
+#   [
+#     "input_ids",
+#     "attention_mask",
+#     "position_ids",
+#     "past_keys",
+#     "past_values"
+#   ],
+#   10,
+# )
 
 # "dynamic_axes": {
 #     "input_ids": {"0": "batch_size", "1": "sequence_length"},

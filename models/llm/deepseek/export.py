@@ -63,6 +63,7 @@ def export():
   if args.gen_calib_data or args.all:
     logger.info('Generating calibration data...\n')
     prompt = "Hello, this is Sam speaking, it is so nice to meet you! Let me give you a simple puzzle, see whether you can solve it and then find out how smart you are, would you? Please bear with me, here is the puzzle: imagine you are in a room with three light switches. Each switch controls one of three light bulbs in another room. You cannot see the bulbs from where the switches are. You can flip the switches as many times as you want, but you can only enter the room with the bulbs once. How can you determine which switch controls which bulb?"
+    prompt = "Who is the first president of United States?"
     calib_data_gen = CalibDataGenerator(model_name, **asdict(conv_cfg))
     calib_data_gen.run(prompt)
     calib_data_gen.save_data(data_dir=data_dir)

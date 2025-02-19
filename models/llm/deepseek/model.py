@@ -40,13 +40,13 @@ class StaticShapeCache(DynamicCache):
   StaticShapeCache: A cache implementation for static shapes.
   """
 
-  def to_legacy_cache(self) -> tuple[torch.Tensor, torch.Tensor]:
+  def to_legacy_cache(self) -> Tuple[torch.Tensor, torch.Tensor]:
     return torch.stack(self.key_cache), torch.stack(self.value_cache)
 
   @classmethod
   def from_legacy_cache(
     cls,
-    past_key_values: tuple[torch.Tensor, torch.Tensor]
+    past_key_values: Tuple[torch.Tensor, torch.Tensor]
   ) -> 'StaticShapeCache':
     cache = cls()
     for idx, (key_states, value_states) in enumerate(zip(*past_key_values)):
@@ -166,12 +166,12 @@ class CausalLMSequence:
     inputs = self._sequence.prompt(input_ids)
     caches = self._kvcache.slice(inputs["input_ids"].shape[-1])
 
-    return {k: torch.from_numpy(v) for k, v in (inputs | caches).items()}
+    return {k: torch.from_numpy(v) for k, v in {**inputs, **caches}.items()}
 
   def token(self, new_token: int) -> Dict[str, torch.Tensor]:
     inputs = self._sequence.token(new_token)
     caches = self._kvcache.slice(inputs["input_ids"].shape[-1])
-    return {k: torch.from_numpy(v) for k, v in (inputs | caches).items()}
+    return {k: torch.from_numpy(v) for k, v in {**inputs, **caches}.items()}
 
   def update_kvcache(self, new_keys: torch.Tensor, new_values: torch.Tensor):
     self._kvcache.update(
