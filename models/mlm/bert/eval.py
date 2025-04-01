@@ -3,14 +3,13 @@ from pprint import pprint
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
 from evaluate import load
 from datasets import load_dataset
 from transformers import AutoTokenizer
 
 from bert_common import npz_to_hfdataset, tokenize_hfdataset
-from qnpumodel import (
-    QNPUBertForTokenClassification as QNPUBertForTCL,
-)
+from utils.npumodel import QNPUBertModel, ModelOutput
 
 
 def inference(
@@ -18,8 +17,9 @@ def inference(
     dataset,
     qnpu_model_path,
     input_cols,
+    batch_size=128,
 ):
-    model = QNPUBertForTCL(
+    model = QNPUBertModel(
         qnpu_model_path,
         device="npu",
         qnpu_config={
@@ -33,17 +33,37 @@ def inference(
         seq_length=model.qnpu_session.sequence_length,
     )
 
-    inputs = {col: tokenized_dataset[col]
-              for col in tokenized_dataset.column_names}
-    return model(**inputs)
+    all_outputs = []
+    dataloader = DataLoader(tokenized_dataset, batch_size=batch_size)
+    for batch in dataloader:
+        all_outputs.append(model(**batch))
+
+    # inputs = {col: tokenized_dataset[col] for col in tokenized_dataset.column_names}
+    # output = model(**inputs)
+
+    avg, p90 = model.qnpu_session.latency
+    print("Latency:")
+    pprint(
+        {
+            "avg": float(avg),
+            "p90": float(p90),
+        }
+    )
+
+    return ModelOutput(
+        **{
+            k: torch.cat([o[k] for o in all_outputs], dim=0)
+            for k in all_outputs[0].keys()
+        }
+    )
 
 
 def eval_llmlingua2_tcl(logits, targets):
     f1 = load("f1")
     accu = load("accuracy")
     metrics = {
-      "r50": 0.50,
-      "r33": 0.33,
+        "r50": 0.50,
+        "r33": 0.33,
     }
 
     def logits_to_label(rate, logits) -> torch.Tensor:
@@ -54,15 +74,16 @@ def eval_llmlingua2_tcl(logits, targets):
     results = {}
     for key, rate in metrics.items():
         predictions = torch.cat([logits_to_label(rate, p) for p in logits])
-        references = torch.cat([logits_to_label(rate, torch.from_numpy(t))
-                                for t in targets])
+        references = torch.cat(
+            [logits_to_label(rate, torch.from_numpy(t)) for t in targets]
+        )
         accu_results = accu.compute(
-          predictions=predictions,
-          references=references,
+            predictions=predictions,
+            references=references,
         )
         f1_results = f1.compute(
-          predictions=predictions,
-          references=references,
+            predictions=predictions,
+            references=references,
         )
         results[key] = {**(f1_results or {}), **(accu_results or {})}
 
@@ -87,7 +108,7 @@ def eval_squad(
             max_length=seq_length,
             truncation=True,
             return_offsets_mapping=True,
-            return_tensors="pt"
+            return_tensors="pt",
         ).offset_mapping
 
         start_index = logits[0].argmax(dim=-1)
@@ -96,17 +117,21 @@ def eval_squad(
         answer_end = offset_mapping[:, end_index, 1].squeeze()
         pred_answer = sample["context"][answer_start:answer_end]
 
-        references.append({
-            "id": sample["id"],
-            "answers": {
-                "answer_start": sample["answers"]["answer_start"],
-                "text": sample["answers"]["text"],
-            },
-        })
-        predictions.append({
-            "id": sample["id"],
-            "prediction_text": pred_answer,
-        })
+        references.append(
+            {
+                "id": sample["id"],
+                "answers": {
+                    "answer_start": sample["answers"]["answer_start"],
+                    "text": sample["answers"]["text"],
+                },
+            }
+        )
+        predictions.append(
+            {
+                "id": sample["id"],
+                "prediction_text": pred_answer,
+            }
+        )
 
     return load("squad").compute(
         predictions=predictions,
@@ -116,9 +141,9 @@ def eval_squad(
 
 def format_output(data, ratio=100.0):
     import json
+
     return json.loads(
-        json.dumps(data),
-        parse_float=lambda x: round(float(x) * ratio, 2)
+        json.dumps(data), parse_float=lambda x: round(float(x) * ratio, 2)
     )
 
 
@@ -128,41 +153,50 @@ if __name__ == "__main__":
     root = Path(__file__).resolve().parent
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task", type=str, default="scl-glue-mrpc")
+    parser.add_argument("--task", type=str, default="qa-squad")
     parser.add_argument("--max-samples", type=int, default=100)
+    parser.add_argument("--batch-size", type=int, default=128)
     args = parser.parse_args()
 
     if args.task == "scl-glue-mrpc":
-        tokenizer = AutoTokenizer.from_pretrained(
-            "intel/bert-base-uncased-mrpc")
+        tokenizer = AutoTokenizer.from_pretrained("intel/bert-base-uncased-mrpc")
         dataset = load_dataset("glue", "mrpc", split="test").select(
-            range(args.max_samples))
+            range(args.max_samples)
+        )
         qdq_model = "intel/bert_base_uncased_scl"
-        qnpu_model_path = root / "outputs" / qdq_model / "output_model/model/model.onnx"
+        qnpu_model_path = root / "outputs" / qdq_model / "model.onnx"
 
         logits = inference(
             tokenizer=tokenizer,
             dataset=dataset,
             qnpu_model_path=qnpu_model_path,
             input_cols=["sentence1", "sentence2"],
+            batch_size=args.batch_size,
         )[0]
 
-        accu = load("accuracy").compute(
-            predictions=logits.argmax(dim=-1),
-            references=dataset["label"],
-        ) or {}
-        f1 = load("f1").compute(
-            predictions=logits.argmax(dim=-1),
-            references=dataset["label"],
-        ) or {}
+        accu = (
+            load("accuracy").compute(
+                predictions=logits.argmax(dim=-1),
+                references=dataset["label"],
+            )
+            or {}
+        )
+        f1 = (
+            load("f1").compute(
+                predictions=logits.argmax(dim=-1),
+                references=dataset["label"],
+            )
+            or {}
+        )
         pprint(format_output({**accu, **f1}))
     elif args.task == "qa-squad":
         model_name = "google-bert/bert-large-uncased-whole-word-masking-finetuned-squad"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         dataset = load_dataset("squad", split="validation").select(
-            range(args.max_samples))
+            range(args.max_samples)
+        )
         qdq_model = "google/bert_large_uncased_qa"
-        qnpu_model_path = root / "outputs" / qdq_model / "output_model/model/model.onnx"
+        qnpu_model_path = root / "outputs" / qdq_model / "model.onnx"
 
         outputs = inference(
             tokenizer=tokenizer,
@@ -180,19 +214,21 @@ if __name__ == "__main__":
         pprint(format_output(results, ratio=1.0))
     elif args.task == "tcl-llmlingua2-meetingbank":
         tokenizer = AutoTokenizer.from_pretrained(
-            "microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank")
+            "microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank"
+        )
         added_tokens = [f"[NEW{i}]" for i in range(100)]
         tokenizer.add_special_tokens(
             {"additional_special_tokens": added_tokens}  # type: ignore
         )
 
         dataset = npz_to_hfdataset(
-            root / "data" /
-            "llmlingua2_bert_base_multilingual_cased_meetingbank_tokens.npz",
+            root
+            / "data"
+            / "llmlingua2_bert_base_multilingual_cased_meetingbank_tokens.npz",
             max_samples=args.max_samples,
         )
         qdq_model = "microsoft/llmlingua2_bert_base_multilingual_cased"
-        qnpu_model_path = root / "outputs" / qdq_model / "output_model/model/model.onnx"
+        qnpu_model_path = root / "outputs" / qdq_model / "model/model.onnx"
 
         outputs = inference(
             tokenizer=tokenizer,

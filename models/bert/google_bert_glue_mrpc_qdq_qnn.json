@@ -1,0 +1,160 @@
+{
+  "input_model": {
+    "type": "PyTorchModel",
+    "model_path": "google-bert/bert-base-multilingual-cased",
+    "io_config": {
+      "input_names": [
+        "input_ids",
+        "attention_mask",
+        "token_type_ids",
+        "position_ids"
+      ],
+      "input_shapes": [
+        [1, 512],
+        [1, 1, 512, 512],
+        [1, 512],
+        [1, 512]
+      ],
+      "input_types": ["int32", "float32", "int32", "int32"],
+      "output_names": ["logits"],
+      "dynamic_axes": {
+        "input_ids": { "0": "batch_size", "1": "sequence_length" },
+        "attention_mask": {
+          "0": "batch_size",
+          "2": "sequence_length",
+          "3": "sequence_length"
+        },
+        "token_type_ids": { "0": "batch_size", "1": "sequence_length" },
+        "position_ids": { "0": "batch_size", "1": "sequence_length" },
+        "logits": { "0": "batch_size" }
+      }
+    },
+    "model_loader": "load_bert_nsp_model",
+    "model_script": "google_bert_glue_mrpc_qdq_qnn.py",
+    "script_dir": "."
+  },
+  "engine": {
+    "host": "host_system",
+    "target": "target_system",
+    "cache_dir": "temp/cache",
+    "clean_cache": true,
+    "clean_evaluation_cache": true,
+    "evaluator": "glue_evaluator",
+    "evaluate_input_model": false,
+    "output_dir": "outputs/google/bert_base_multilingual_cased"
+  },
+  "systems": {
+    "host_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        { "device": "cpu", "execution_providers": ["CPUExecutionProvider"] }
+      ]
+    },
+    "target_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        { "device": "npu", "execution_providers": ["QNNExecutionProvider"] }
+      ]
+    }
+  },
+  "data_configs": [
+    {
+      "name": "calibration_data",
+      "type": "HuggingfaceContainer",
+      "user_script": "bert_script.py",
+      "script_dir": ".",
+      "load_dataset_config": {
+        "data_name": "glue",
+        "subset": "mrpc",
+        "split": "train[:10]"
+      },
+      "pre_process_data_config": {
+        "type": "tokenize_dataset",
+        "input_cols": ["sentence1", "sentence2"],
+        "label_col": "label",
+        "seq_length": 512,
+        "model_name": "google-bert/bert-base-multilingual-cased"
+      },
+      "dataloader_config": { "batch_size": 1 }
+    },
+    {
+      "name": "eval_data",
+      "type": "HuggingfaceContainer",
+      "load_dataset_config": {
+        "data_name": "glue",
+        "subset": "mrpc",
+        "split": "test[:100]"
+      },
+      "pre_process_data_config": {
+        "type": "tokenize_dataset",
+        "input_cols": ["sentence1", "sentence2"],
+        "label_col": "label",
+        "seq_length": 512,
+        "model_name": "google-bert/bert-base-multilingual-cased"
+      },
+      "post_process_data_config": {
+        "type": "bert_scl_post_process"
+      },
+      "dataloader_config": { "batch_size": 1 },
+      "user_script": "bert_script.py"
+    }
+  ],
+  "evaluators": {
+    "glue_evaluator": {
+      "metrics": [
+        {
+          "name": "perf_latency",
+          "type": "latency",
+          "data_config": "eval_data",
+          "sub_types": [
+            {
+              "name": "avg",
+              "warmup_num": 5,
+              "repeat_test_num": 20,
+              "priority": 1
+            },
+            { "name": "p90", "warmup_num": 5, "repeat_test_num": 20 }
+          ],
+          "user_config": {
+            "inference_settings": {
+              "onnx": {
+                "execution_provider": "QNNExecutionProvider",
+                "provider_options": [
+                  {
+                    "htp_graph_finalization_optimization_mode": 3,
+                    "htp_performance_mode": "burst"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "passes": {
+    "conversion": {
+      "device": "cpu",
+      "type": "OnnxConversion",
+      "target_opset": 17,
+      "dynamic": false,
+      "use_dynamo_exporter": false
+    },
+    "to_fixed_shape": {
+      "type": "DynamicToFixedShape",
+      "dim_param": ["batch_size", "sequence_length"],
+      "dim_value": [1, 512]
+    },
+    "qnn_preprocess": {
+      "type": "QNNPreprocess",
+      "fuse_layernorm": true
+    },
+    "quantization": {
+      "type": "OnnxStaticQuantization",
+      "data_config": "calibration_data",
+      "quant_preprocess": true,
+      "activation_type": "QUInt16",
+      "weight_type": "QUInt8"
+    }
+  }
+}

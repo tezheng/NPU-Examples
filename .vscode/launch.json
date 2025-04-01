@@ -10,8 +10,11 @@
       "request": "launch",
       "justMyCode": false,
       "program": "${file}",
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
+      "cwd": "${fileDirname}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
     },
     {
       "name": "Python Debugger: Current Module",
@@ -26,27 +29,64 @@
       }
     },
     {
-      "name": "Bert QDQ",
+      "name": "Local ORT: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "justMyCode": false,
+      "program": "${file}",
+      "cwd": "${workspaceFolder}/models/llm/deepseek/",
+      "console": "integratedTerminal",
+      "args": [
+        "-m",
+        "D:/Models/DeepSeek-R1-Distilled-NPU-Optimized",
+        "-e",
+        "qnn",
+        "--chat_template",
+        "<|begin▁of▁sentence|>You are a helpful assistant.<|User|>{input}<|Assistant|>"
+      ],
+      "env": {
+        "PATH": "D:/ort/build/qnn/Release/Release;%PATH%",
+        "PYTHONPATH": "D:/onnxruntime-genai/build/Windows/Release/wheel/build/lib.win-arm64-cpython-312;D:/ort/build/qnn/Release/Release"
+      }
+    },
+    {
+      "name": "Olive",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "olive.workflows.run",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "args": ["--config", "openai_clip_text_b32_qdq.json"],
+      "cwd": "${workspaceFolder}/models/clip/",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
+      "name": "Olive: DeepSeek",
       "type": "debugpy",
       "request": "launch",
       "justMyCode": false,
       "module": "olive.workflows.run",
-      "args": ["--config", "intel_bert_qdq_npu_glue_mrpc.json"],
+      "args": ["--config", "deepseek_r1_distill_qwen_1.5b_surgery.json"],
       "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}/models/mlm/bert/",
+      "cwd": "${workspaceFolder}/models/llm/deepseek/",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/models/mlm/bert/"
+        "PYTHONPATH": "${workspaceFolder}/models/llm/deepseek/"
       }
     },
     {
-      "name": "Python Debugger: Llama QDQ",
+      "name": "Quant",
       "type": "debugpy",
       "request": "launch",
       "justMyCode": false,
-      "program": "${workspaceFolder}/models/llm/llama/main.py",
-      "cwd": "${workspaceFolder}",
-      "args": "${command:pickArgs}",
-      "console": "integratedTerminal"
+      "program": "${workspaceFolder}/models/llm/deepseek/",
+      "cwd": "${workspaceFolder}/models/llm/deepseek/",
+      "args": ["--quantize-qdq", "--skip-prefill", "--skip-pre-process"],
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
     }
   ]
 }

@@ -7,7 +7,6 @@ import bert_script  # noqa: F401
 
 
 def load_model(model_name: str):
-    model = AutoModelSCL.from_pretrained(model_name)
-    model.eval()
+    model = AutoModelSCL.from_pretrained(model_name).eval()
     model.bert = SimpleBert(model.bert)
     return model

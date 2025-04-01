@@ -15,7 +15,7 @@
         [1, 512],
         [1, 512]
       ],
-      "input_types": ["int64", "float32", "int64", "int64"],
+      "input_types": ["int32", "float32", "int32", "int32"],
       "output_names": ["logits"],
       "output_shapes": [[1, 512, 2]],
       "output_types": ["float32"],
@@ -42,6 +42,11 @@
     "clean_evaluation_cache": true,
     "evaluator": "common_evaluator",
     "evaluate_input_model": false,
+    "packaging_config": {
+      "type": "Zipfile",
+      "name": "llmlingua2_bert_base_multilingual_cased",
+      "include_runtime_packages": false
+    },
     "output_dir": "outputs/microsoft/llmlingua2_bert_base_multilingual_cased"
   },
   "systems": {

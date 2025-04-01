@@ -36,8 +36,8 @@ class CalibDataMixin(TwoStagesMixin):
               inputs: dict[str, torch.Tensor]) -> tuple[int, LogitsWithPast]:
     token, outputs = self._generate(inputs)
     self._prefill_data.append({
-      **{f'i_{k}': v.numpy(force=True) for k, v in inputs.items()},
-      **{f'o_{k}': v.numpy(force=True) for k, v in outputs.items()},
+      **{k: v.numpy(force=True) for k, v in inputs.items()},
+      **{k: v.numpy(force=True) for k, v in outputs.items()},
     })
     self._prefill_len = inputs['position_ids'].max()
     return token, outputs
@@ -46,8 +46,8 @@ class CalibDataMixin(TwoStagesMixin):
              inputs: dict[str, torch.Tensor]) -> tuple[int, LogitsWithPast]:
     token, outputs = self._generate(inputs)
     self._decode_data.append({
-      **{f'i_{k}': v.numpy(force=True) for k, v in inputs.items()},
-      **{f'o_{k}': v.numpy(force=True) for k, v in outputs.items()},
+      **{k: v.numpy(force=True) for k, v in inputs.items()},
+      **{k: v.numpy(force=True) for k, v in outputs.items()},
     })
 
     if inputs['position_ids'].max() - self._prefill_len >= self._max_calib_len:
@@ -108,8 +108,8 @@ class ConvertONNXMixin(TwoStagesMixin):
     # To avoid naming conflicts with the model's input/output names
     self.prefill_input = ConvertONNXMixin.ModuleIO(
       input_values=inputs,
-      input_names=['i_' + k for k in inputs.keys()],
-      output_names=['o_' + k for k in outputs.keys()],
+      input_names=[k for k in inputs.keys()],
+      output_names=[k for k in outputs.keys()],
     )
 
     return token, outputs
@@ -121,8 +121,8 @@ class ConvertONNXMixin(TwoStagesMixin):
     # To avoid naming conflicts with the model's input/output names
     self.decode_input = ConvertONNXMixin.ModuleIO(
       input_values=inputs,
-      input_names=['i_' + k for k in inputs.keys()],
-      output_names=['o_' + k for k in outputs.keys()],
+      input_names=[k for k in inputs.keys()],
+      output_names=[k for k in outputs.keys()],
     )
 
     return self.eos_token_id, outputs

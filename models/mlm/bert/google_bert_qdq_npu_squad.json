@@ -15,13 +15,8 @@
         [1, 512],
         [1, 512]
       ],
-      "input_types": ["int64", "float32", "int64", "int64"],
+      "input_types": ["int32", "float32", "int32", "int32"],
       "output_names": ["start_logits", "end_logits"],
-      "output_shapes": [
-        [1, 512],
-        [1, 512]
-      ],
-      "output_types": ["float32", "float32"],
       "dynamic_axes": {
         "input_ids": { "0": "batch_size", "1": "sequence_length" },
         "attention_mask": {
@@ -45,7 +40,7 @@
     "clean_cache": true,
     "clean_evaluation_cache": true,
     "evaluator": "squad_evaluator",
-    "evaluate_input_model": false,
+    "evaluate_input_model": true,
     "output_dir": "outputs/google/bert_large_uncased_qa"
   },
   "systems": {
@@ -136,8 +131,6 @@
           "name": "perf_latency",
           "type": "latency",
           "data_config": "eval_data",
-          "warmup_num": 2,
-          "repeat_test_num": 10,
           "sub_types": [
             { "name": "avg", "warmup_num": 2, "repeat_test_num": 10 },
             { "name": "p75", "warmup_num": 2, "repeat_test_num": 10 },
@@ -165,31 +158,23 @@
       "device": "cpu",
       "type": "OnnxConversion",
       "target_opset": 17,
-      "use_dynamo_exporter": false,
-      "save_as_external_data": true,
-      "all_tensors_to_one_file": true
+      "use_dynamo_exporter": false
     },
     "to_fixed_shape": {
       "type": "DynamicToFixedShape",
       "dim_param": ["batch_size", "sequence_length"],
-      "dim_value": [1, 512],
-      "save_as_external_data": true,
-      "all_tensors_to_one_file": true
+      "dim_value": [1, 512]
     },
     "qnn_preprocess": {
       "type": "QNNPreprocess",
-      "fuse_layernorm": true,
-      "save_as_external_data": true,
-      "all_tensors_to_one_file": true
+      "fuse_layernorm": true
     },
     "quantization": {
       "type": "OnnxStaticQuantization",
       "data_config": "calibration_data",
       "quant_preprocess": true,
       "activation_type": "QUInt16",
-      "weight_type": "QUInt8",
-      "save_as_external_data": true,
-      "all_tensors_to_one_file": true
+      "weight_type": "QUInt8"
     }
   }
 }

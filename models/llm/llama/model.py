@@ -1,9 +1,9 @@
 
 from abc import ABC, abstractmethod
 from typing import cast, Any, Optional, Self, TypedDict
+from dataclasses import dataclass
 
 import torch
-
 from transformers import AutoTokenizer
 from transformers.cache_utils import Cache, DynamicCache
 from transformers.models.llama import (
@@ -11,9 +11,12 @@ from transformers.models.llama import (
   LlamaForCausalLM,
   LlamaTokenizerFast,
 )
-from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.modeling_outputs import (
+    CausalLMOutputWithPast,
+    ModelOutput as _ModelOutput,
+)
 
-from .sequence import SinkSequence
+from sequence import SinkSequence
 
 
 class StaticCache(Cache):
@@ -154,6 +157,27 @@ class LogitsWithPast(TypedDict):
   past_values: torch.Tensor
 
 
+@dataclass
+class ModelOutput(_ModelOutput):
+  """Wrapper for ModelOutput class from transformers.modeling_outputs.
+  Always returns None for missing keys when accessed with __getitem__
+  or __getattr__.
+  """
+
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+
+  def __getitem__(self, k):
+    if isinstance(k, str) and k not in self.keys():
+      return None
+    return super().__getitem__(k)
+
+  def __getattr__(self, k):
+    if k in self.keys():
+      return self[k]
+    return None
+
+
 class LlamaBlock(torch.nn.Module):
   def __init__(self, model: LlamaForCausalLM) -> None:
     super().__init__()
@@ -167,7 +191,7 @@ class LlamaBlock(torch.nn.Module):
     position_ids: torch.Tensor,
     past_keys: torch.Tensor,
     past_values: torch.Tensor,
-  ) -> LogitsWithPast:
+  ) -> ModelOutput:
     outputs: CausalLMOutputWithPast = self._model(
       input_ids=input_ids,
       attention_mask=attention_mask,
@@ -177,13 +201,13 @@ class LlamaBlock(torch.nn.Module):
       use_cache=True,
     )
     # assert type(outputs.past_key_values) is StaticShapeCache
-    past_keys, past_values = outputs.past_key_values.to_legacy_cache()
+    new_keys, new_values = outputs.past_key_values.to_legacy_cache()
 
     # return outputs.logits[:, -1, :], past_keys, past_values
-    return LogitsWithPast(
+    return ModelOutput(
       logits=outputs.logits[:, -1, :],
-      past_keys=past_keys,
-      past_values=past_values,
+      new_keys=new_keys,
+      new_values=new_values,
     )
 
 

@@ -20,7 +20,7 @@ def create_llmlingua2_tokenizer(model_name: str, max_force_token: int = 100):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     added_tokens = [f"[NEW{i}]" for i in range(max_force_token)]
     tokenizer.add_special_tokens(
-      {"additional_special_tokens": added_tokens}  # type: ignore
+        {"additional_special_tokens": added_tokens}  # type: ignore
     )
     return tokenizer
 
@@ -32,7 +32,7 @@ def load_llmlingua2_bert_model(model_name: str) -> torch.nn.Module:
     return model
 
 
-@ Registry.register_dataset()
+@Registry.register_dataset()
 def load_meetingbank_data(
     data_path: str,
     model_name: str,
@@ -61,12 +61,12 @@ def eval_token_classification(
     f1 = load("f1")
     accu = load("accuracy")
     metrics = {
-      "r00": 0.00,
-      "r50": 0.50,
-      "r33": 0.33,
+        "r00": 0.00,
+        "r50": 0.50,
+        "r33": 0.33,
     }
 
-    @ torch.inference_mode()
+    @torch.inference_mode()
     def logits_to_label(rate, logits: torch.Tensor) -> torch.Tensor:
         probs = logits.softmax(dim=-1)[:, 1]
         threshold = np.percentile(probs, int(100 * rate + 1))
@@ -78,12 +78,12 @@ def eval_token_classification(
                                  for p in outputs.preds])
         references = torch.cat([logits_to_label(rate, t) for t in targets])
         accu_results = accu.compute(
-          predictions=predictions,
-          references=references,
+            predictions=predictions,
+            references=references,
         )
         f1_results = f1.compute(
-          predictions=predictions,
-          references=references,
+            predictions=predictions,
+            references=references,
         )
         metrics = {**(f1_results or {}), **(accu_results or {})}
         results.update({f"{n}-{key}": v for n, v in metrics.items()})

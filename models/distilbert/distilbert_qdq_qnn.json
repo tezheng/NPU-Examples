@@ -1,0 +1,48 @@
+{
+  "input_model": {
+    "type": "HFModel",
+    "model_path": "distilbert/distilbert-base-uncased",
+    "task": "feature-extraction",
+    "generative": false
+  },
+  "engine": {
+    "host": "host_system",
+    "target": "target_system",
+    "cache_dir": "temp/cache",
+    "clean_cache": true,
+    "clean_evaluation_cache": true,
+    "output_dir": "outputs/distilbert/distilbert_base_uncased"
+  },
+  "systems": {
+    "host_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        { "device": "cpu", "execution_providers": ["CPUExecutionProvider"] }
+      ]
+    },
+    "target_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        { "device": "npu", "execution_providers": ["QNNExecutionProvider"] }
+      ]
+    }
+  },
+  "passes": {
+    "conversion": {
+      "device": "cpu",
+      "type": "OnnxConversion",
+      "target_opset": 17,
+      "dynamic": false,
+      "use_dynamo_exporter": false
+    },
+    "to_fixed_shape": {
+      "type": "DynamicToFixedShape",
+      "dim_param": ["batch_size", "sequence_length"],
+      "dim_value": [1, 512]
+    },
+    "qnn_preprocess": {
+      "type": "QNNPreprocess",
+      "fuse_layernorm": true
+    }
+  }
+}
