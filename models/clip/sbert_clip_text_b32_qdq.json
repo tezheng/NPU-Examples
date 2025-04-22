@@ -57,9 +57,9 @@
         "split": "test[:4]"
       },
       "pre_process_data_config": {
-        "type": "tokenize_dataset",
+        "type": "pre_process_dataset",
         "model_name": "openai/clip-vit-base-patch32",
-        "input_col": "caption",
+        "caption_col": "caption",
         "max_length": 77
       },
       "dataloader_config": { "batch_size": 1 },
