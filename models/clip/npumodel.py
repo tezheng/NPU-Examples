@@ -200,8 +200,6 @@ class QNPUBertModel(torch.nn.Module):
         # assert seq_length == self.qnpu_session.sequence_length
         # if token_type_ids is None:
         #     token_type_ids = torch.zeros(input_ids.shape).long()
-        # if position_ids is None:
-        #     position_ids = torch.arange(seq_length).long().expand(batch_sz, -1)
         if attention_mask.dim() == 2:
             attention_mask = create_4d_mask(attention_mask, input_ids.shape)
 

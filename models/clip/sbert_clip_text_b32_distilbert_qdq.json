@@ -1,19 +1,20 @@
 {
   "input_model": {
     "type": "PytorchModel",
-    "model_path": "laion/clip-vit-b-32-laion2b-s34b-b79k",
+    "model_path": "sentence-transformers/clip-ViT-B-32-multilingual-v1",
     "generative": false,
     "io_config": {
       "input_names": ["input_ids", "attention_mask"],
       "input_shapes": [
-        [1, 77],
-        [1, 1, 77, 77]
+        [1, 128],
+        [1, 1, 128, 128]
       ],
       "input_types": ["int32", "float32"],
-      "output_names": ["embeds"]
+      "output_names": ["embeds", "last_hidden_state"]
     },
-    "model_loader": "load_text_encoder",
-    "model_script": "clip_script.py"
+    "model_loader": "load_sdistilbert_text_encoder",
+    "model_script": "sbert_clip_script.py",
+    "script_dir": "."
   },
   "passes": {
     "conversion": {
@@ -25,7 +26,7 @@
     "to_fixed_shape": {
       "type": "DynamicToFixedShape",
       "dim_param": ["batch_size", "sequence_length"],
-      "dim_value": [1, 77]
+      "dim_value": [1, 128]
     },
     "transformer_optimizer": {
       "type": "OrtTransformersOptimization",
@@ -45,7 +46,9 @@
       "data_config": "calib_data",
       "quant_preprocess": true,
       "activation_type": "QUInt16",
-      "weight_type": "QUInt8"
+      "weight_type": "QUInt8",
+      "save_as_external_data": true,
+      "all_tensors_to_one_file": true
     }
   },
   "data_configs": [
@@ -58,12 +61,13 @@
       },
       "pre_process_data_config": {
         "type": "pre_process_dataset",
-        "model_name": "laion/clip-vit-b-32-laion2b-s34b-b79k",
+        "model_name": "sentence-transformers/clip-ViT-B-32-multilingual-v1",
         "caption_col": "caption",
-        "max_length": 77
+        "max_length": 128
       },
       "dataloader_config": { "batch_size": 1 },
-      "user_script": "clip_script.py"
+      "user_script": "clip_script.py",
+      "script_dir": "."
     },
     {
       "name": "eval_data",
@@ -74,16 +78,17 @@
       },
       "pre_process_data_config": {
         "type": "pre_process_dataset",
-        "model_name": "laion/clip-vit-b-32-laion2b-s34b-b79k",
+        "model_name": "sentence-transformers/clip-ViT-B-32-multilingual-v1",
         "generate_ground_truth": true,
         "caption_col": "caption",
-        "max_length": 77
+        "max_length": 128
       },
       "post_process_data_config": {
         "type": "embed_post_process"
       },
       "dataloader_config": { "batch_size": 1 },
-      "user_script": "clip_script.py"
+      "user_script": "clip_script.py",
+      "script_dir": "."
     }
   ],
   "evaluators": {
@@ -133,5 +138,5 @@
   "clean_cache": true,
   "clean_evaluation_cache": true,
   "evaluate_input_model": false,
-  "output_dir": "models/laion/clip_b32/text"
+  "output_dir": "models/sbert/clip_b32/distilbert"
 }

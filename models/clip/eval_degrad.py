@@ -8,13 +8,65 @@ from torch.utils.data import DataLoader
 
 from datasets import load_dataset
 from transformers import (
-    AutoTokenizer,
-    CLIPProcessor,
+    AutoProcessor,
     CLIPTextModelWithProjection as TextEncoder,
     CLIPVisionModelWithProjection as ImagenEncoder,
 )
 
 from utils.npumodel import QNPUBertModel, QNPUImageModel
+
+
+def load_hf_image_encoder(model_name):
+    if model_name == "sentence-transformers/clip-ViT-B-32":
+        from sbert_clip_script import load_sbert_image_encoder
+
+        return load_sbert_image_encoder(model_name)
+
+    return ImagenEncoder.from_pretrained(model_name).eval()
+
+
+def load_hf_text_encoder(model_name):
+    if model_name == "sentence-transformers/clip-ViT-B-32-multilingual-v1":
+        from transformers import DistilBertModel
+        from transformers.modeling_outputs import ModelOutput
+        from transformers.utils import cached_file
+
+        class DistillBertTextEncoder(torch.nn.Module):
+            def __init__(self, model_name: str, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.distilbert = DistilBertModel.from_pretrained(model_name).eval()
+                self.dense_weights = torch.load(
+                    cached_file(model_name, "2_Dense/pytorch_model.bin")
+                )["linear.weight"]
+
+            @torch.inference_mode()
+            def forward(self, input_ids, attention_mask):
+                model_output = self.distilbert(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                )
+
+                # Mean Pooling - Take attention mask into account for correct averaging
+                last_hidden_state = model_output[0]
+                input_mask_expanded = (
+                    attention_mask.float()
+                    .unsqueeze(dim=-1)
+                    .expand(last_hidden_state.size())
+                )
+                sum_state = torch.sum(last_hidden_state * input_mask_expanded, dim=1)
+                pooled_output = F.normalize(sum_state, p=2, dim=1)
+
+                # Calculate embedding
+                text_embeds = torch.matmul(pooled_output, self.dense_weights.T)
+
+                return ModelOutput(
+                    embeds=text_embeds,
+                    last_hidden_state=last_hidden_state,
+                )
+
+        return DistillBertTextEncoder(model_name)
+
+    return TextEncoder.from_pretrained(model_name).eval()
 
 
 def calculate_score(npu_model, torch_model, dataloader):
@@ -45,15 +97,9 @@ def calculate_score(npu_model, torch_model, dataloader):
 
 
 def eval_text_encoder(model_name, model_path, dataset, batch_size):
-    processor = AutoTokenizer.from_pretrained(model_name)
-    npu_model = QNPUBertModel(
-        qnpu_model_path=model_path,
-        device="npu",
-        qnpu_config={
-            "disable_cpu_fallback": "1",
-        },
-    )
-    torch_model = TextEncoder.from_pretrained(model_name).eval()
+    processor = AutoProcessor.from_pretrained(model_name)
+    npu_model = QNPUBertModel(qnpu_model_path=model_path)
+    torch_model = load_hf_text_encoder(model_name)
 
     dataloader = DataLoader(
         dataset.map(
@@ -75,15 +121,9 @@ def eval_text_encoder(model_name, model_path, dataset, batch_size):
 
 
 def eval_vision_encoder(model_name, model_path, dataset, batch_size):
-    processor = CLIPProcessor.from_pretrained(model_name)
-    npu_model = QNPUImageModel(
-        model_path=model_path,
-        device="npu",
-        qnpu_config={
-            "disable_cpu_fallback": "1",
-        },
-    )
-    torch_model = ImagenEncoder.from_pretrained(model_name).eval()
+    processor = AutoProcessor.from_pretrained(model_name, use_fast=True)
+    npu_model = QNPUImageModel(model_path=model_path)
+    torch_model = load_hf_image_encoder(model_name)
 
     dataloader = DataLoader(
         dataset.map(
@@ -105,6 +145,7 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description="Evaluate a NPU model")
     parser.add_argument(
+        "--model",
         "--model-name",
         type=str,
         default="openai/clip-vit-base-patch16",
@@ -123,13 +164,20 @@ def parse_args():
         choices=["text", "image"],
         help="Encoder type: 'text' or 'image'",
     )
+    parser.add_argument(
+        "--dataset",
+        "--dataset-name",
+        type=str,
+        default="nlphuji/flickr_1k_test_image_text_retrieval",
+        help="Dataset for evaluation",
+    )
     parser.add_argument("--max-samples", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=128)
 
     args = parser.parse_args()
     if args.model_path is None:
         qdq_model = "openai/clip_b16/"
-        output_dir = Path(__file__).resolve().parent / "outputs"
+        output_dir = Path(__file__).resolve().parent / "models"
         args.model_path = output_dir / qdq_model / args.encoder / "model.onnx"
 
     return args
@@ -138,16 +186,25 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
 
-    model_name = args.model_name
+    model_name = args.model
     model_path = args.model_path.resolve()
     batch_size = args.batch_size
 
+    print(
+        f"Evaluating degradation of CLIP {args.encoder} encoder with "
+        f"dataset {args.dataset}..."
+    )
+    print(f"Model name: {model_name}")
+    print(f"Model path: {model_path}")
+
+    print(f"Loading dataset: {args.dataset}...")
     dataset = load_dataset(
-        "nlphuji/flickr30k",
+        args.dataset,
         split="test",
         streaming=True,
     ).take(args.max_samples)
 
+    print("Evaluating: calculating similarity scores...")
     if args.encoder == "text":
         scores = eval_text_encoder(model_name, model_path, dataset, batch_size)
     else:
