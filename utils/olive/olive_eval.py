@@ -1,10 +1,11 @@
-from typing import cast, Dict, Optional
+from typing import cast, Dict, List, Optional
 from pathlib import Path
 from time import time
 import json
 
-from pydantic import ValidationError
+from pydantic import ValidationError, BaseModel
 
+from olive.common.config_utils import ConfigBase
 from olive.evaluator.metric_result import MetricResult
 from olive.model.config import ModelConfig
 from olive.package_config import OlivePackageConfig
@@ -19,6 +20,10 @@ from utils.logger import get_logger
 logger = get_logger("Evaluate")
 
 
+class InferenceConfig(BaseModel):
+    inference_settings: Optional[List[List[Dict]]] = None
+
+
 def load_systems(config_file: Path) -> Dict[str, SystemConfig]:
     try:
         with open(config_file, "r") as f:
@@ -29,14 +34,35 @@ def load_systems(config_file: Path) -> Dict[str, SystemConfig]:
             try:
                 result[key] = SystemConfig(**value)
             except ValidationError as e:
-                print(f"Validation error for key {key}: {e}")
+                logger.error(f"Validation error for key {key}: {e}!")
                 raise
         return result
     except FileNotFoundError:
-        print(f"File {config_file} not found")
+        logger.error(f"Systome config file {config_file} not found!")
         raise
     except json.JSONDecodeError:
-        print(f"Invalid JSON in {config_file}")
+        logger.error(f"Invalid JSON in {config_file}!")
+        raise
+
+
+def load_inference_config(config_file: Path) -> Dict[str, InferenceConfig]:
+    try:
+        with open(config_file, "r") as f:
+            data = json.load(f)
+
+        settings = {}
+        for key, value in data.items():
+            try:
+                settings[key] = InferenceConfig(**value)
+            except ValidationError as e:
+                logger.error(f"Validation error for key {key}: {e}!")
+                raise
+        return settings
+    except FileNotFoundError:
+        logger.error(f"Inference setting config file {config_file} not found!")
+        raise
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON in {config_file}!")
         raise
 
 
@@ -45,6 +71,7 @@ def evaluate(
     evaluator: Optional[str] = None,
     target: Optional[str] = None,
     extra_systems: Optional[Dict[str, SystemConfig] | Path] = None,
+    inference_configs: Optional[Dict[str, InferenceConfig] | Path] = None,
 ):
     import os
 
@@ -113,6 +140,25 @@ def evaluate(
             "evaluators are: {}".format(list(run_config.evaluators.keys()))
         )
 
+    inference_settings = []
+    inference_configs = (
+        load_inference_config(inference_configs)
+        if isinstance(inference_configs, Path)
+        else inference_configs
+    )
+    if inference_configs and target:
+        inference_cfg = inference_configs.get(target, None)
+        if inference_cfg and inference_cfg.inference_settings:
+            for device in inference_cfg.inference_settings:
+                for s in device:
+                    inference_settings.append(s)
+
+    if len(inference_settings) > 0:
+        for m in evaluator_config.metrics:
+            if not hasattr(m, "user_config"):
+                m.user_config = ConfigBase()
+            m.user_config.inference_settings = {"onnx": inference_settings[0]}
+
     logger.info("Evaluating model ...")
     result: MetricResult = target_system.evaluate_model(
         model_config=model_config,
@@ -176,9 +222,16 @@ if __name__ == "__main__":
     if not config_file.exists():
         raise FileNotFoundError(f"Config file {config_file} does not exist.")
 
+    extra_config = (
+        args.system_config.resolve()
+        if args.system_config
+        else Path(__file__).parent / "system_config.json"
+    )
+
     evaluate(
         config_file,
         evaluator=args.evaluator,
         target=args.target,
-        extra_systems=args.system_config,
+        extra_systems=extra_config,
+        inference_configs=extra_config,
     )

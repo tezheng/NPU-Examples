@@ -9,6 +9,16 @@
     "type": "LocalSystem",
     "accelerators": [
       { "device": "npu", "execution_providers": ["QNNExecutionProvider"] }
+    ],
+    "inference_settings": [
+      [
+        {
+          "provider_options": {
+            "htp_graph_finalization_optimization_mode": 3,
+            "htp_performance_mode": "burst"
+          }
+        }
+      ]
     ]
   },
   "ov": {
