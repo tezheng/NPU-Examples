@@ -1,0 +1,20 @@
+{
+  "vitis": {
+    "type": "LocalSystem",
+    "accelerators": [
+      { "device": "npu", "execution_providers": ["VitisAIExecutionProvider"] }
+    ]
+  },
+  "qnn": {
+    "type": "LocalSystem",
+    "accelerators": [
+      { "device": "npu", "execution_providers": ["QNNExecutionProvider"] }
+    ]
+  },
+  "ov": {
+    "type": "LocalSystem",
+    "accelerators": [
+      { "device": "npu", "execution_providers": ["OpenVINOExecutionProvider"] }
+    ]
+  }
+}

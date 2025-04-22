@@ -6,6 +6,7 @@ from time import perf_counter
 import numpy as np
 import onnxruntime as ort
 from tqdm import tqdm
+from transformers.modeling_outputs import ModelOutput as _ModelOutput
 
 import torch
 from torch.utils.data import DataLoader
@@ -142,9 +143,6 @@ class QNPUModule:
         )
 
 
-from transformers.modeling_outputs import ModelOutput as _ModelOutput
-
-
 def create_4d_mask(
     mask: torch.Tensor,
     input_shape: Union[torch.Size, Tuple[int, int]],
@@ -198,10 +196,6 @@ class QNPUBertModel(torch.nn.Module):
     ) -> ModelOutput:
         # batch_sz, seq_length = input_ids.shape
         # assert seq_length == self.qnpu_session.sequence_length
-        # if token_type_ids is None:
-        #     token_type_ids = torch.zeros(input_ids.shape).long()
-        # if position_ids is None:
-        #     position_ids = torch.arange(seq_length).long().expand(batch_sz, -1)
         if attention_mask.dim() == 2:
             attention_mask = create_4d_mask(attention_mask, input_ids.shape)
 

@@ -1,5 +1,6 @@
 from typing import Dict, OrderedDict
 from functools import lru_cache
+from pathlib import Path
 from random import Random
 
 import torch
@@ -11,14 +12,22 @@ from olive.data.registry import Registry
 
 @lru_cache(maxsize=1)
 def get_imagenet_label_map():
-    import requests
+    file_path = Path(__file__).parent / "imagenet_class_index.json"
+    if not file_path.exists():
+        import requests
 
-    imagenet_class_index_url = "https://raw.githubusercontent.com/pytorch/vision/main/gallery/assets/imagenet_class_index.json"
-    response = requests.get(imagenet_class_index_url)
-    response.raise_for_status()  # Ensure the request was successful
+        imagenet_class_index_url = "https://raw.githubusercontent.com/pytorch/vision/main/gallery/assets/imagenet_class_index.json"
+        response = requests.get(imagenet_class_index_url)
+        response.raise_for_status()  # Ensure the request was successful
+        content = response.json()
+    else:
+        import json
+
+        with open(file_path, "r") as f:
+            content = json.loads(f.read())
 
     # Convert {0: ["n01440764", "tench"], ...} to {synset: index}
-    return {v[0]: int(k) for k, v in response.json().items()}
+    return {v[0]: int(k) for k, v in content.items()}
 
 
 @Registry.register_pre_process()
