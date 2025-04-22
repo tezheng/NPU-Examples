@@ -1,12 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from transformers import (
-    CLIPConfig,
-    CLIPTextModelWithProjection,
-    CLIPVisionModelWithProjection,
-    DistilBertModel,
-)
+from transformers import DistilBertModel
 from transformers.modeling_outputs import ModelOutput
 from transformers.utils import cached_file
 
@@ -81,38 +76,3 @@ class SimpleSDistilBertTextEncoder(SDistilBertTextEncoder):
 
 def load_sdistilbert_text_encoder(model_name: str):
     return SimpleSDistilBertTextEncoder(model_name).eval()
-
-
-MODEL_MAPPING = {
-    "sentence-transformers/clip-ViT-B-32": "openai/clip-vit-base-patch32",
-}
-
-
-def load_sbert_image_encoder(model_name):
-    if model_name not in MODEL_MAPPING:
-        raise ValueError(f"Model {model_name} not supported for SBERT image encoder.")
-
-    config = CLIPConfig.from_pretrained(MODEL_MAPPING[model_name])
-    model = CLIPVisionModelWithProjection(config.vision_config)
-
-    state_dict = torch.load(cached_file(model_name, "0_CLIPModel/pytorch_model.bin"))
-    missing, _ = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing)
-
-    return model.eval()
-
-
-def load_sbert_text_encoder(model_name):
-    from clip_script import CLIPTextEncoder
-
-    if model_name not in MODEL_MAPPING:
-        raise ValueError(f"Model {model_name} not supported for SBERT image encoder.")
-
-    config = CLIPConfig.from_pretrained(MODEL_MAPPING[model_name])
-    model = CLIPTextModelWithProjection(config.text_config)
-
-    state_dict = torch.load(cached_file(model_name, "0_CLIPModel/pytorch_model.bin"))
-    missing, _ = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing)
-
-    return CLIPTextEncoder(model.eval())

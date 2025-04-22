@@ -25,6 +25,7 @@ class CLIPTextEncoder(torch.nn.Module):
         self.final_layer_norm = model.text_model.final_layer_norm
         self.text_projection = model.text_projection
 
+    @torch.inference_mode()
     def forward(
         self,
         input_ids,
@@ -53,6 +54,7 @@ class CLIPImageEncoder(torch.nn.Module):
         self.vision_model = model.vision_model
         self.visual_projection = model.visual_projection
 
+    @torch.inference_mode()
     def forward(self, pixel_values):
         vision_outputs = self.vision_model(pixel_values=pixel_values)
         image_embeds = self.visual_projection(vision_outputs.pooler_output)
@@ -92,18 +94,30 @@ class SimpleCLIPModel(torch.nn.Module):
         )
 
 
-def load_clip_model(model_name):
-    model = CLIPModel.from_pretrained(model_name).eval()
-    return SimpleCLIPModel(model)
+HF_MODEL_SUBFOLDER_MAPPING = {
+    "sentence-transformers/clip-ViT-B-32": "0_CLIPModel",
+}
 
 
 def load_text_encoder(model_name):
-    model = CLIPTextModelWithProjection.from_pretrained(model_name).eval()
+    model = CLIPTextModelWithProjection.from_pretrained(
+        model_name,
+        subfolder=HF_MODEL_SUBFOLDER_MAPPING.get(model_name, ""),
+    ).eval()
+
     return CLIPTextEncoder(model)
 
 
 def load_image_encoder(model_name):
-    return CLIPVisionModelWithProjection.from_pretrained(model_name).eval()
+    return CLIPVisionModelWithProjection.from_pretrained(
+        model_name,
+        subfolder=HF_MODEL_SUBFOLDER_MAPPING.get(model_name, ""),
+    ).eval()
+
+
+def load_clip_model(model_name):
+    model = CLIPModel.from_pretrained(model_name).eval()
+    return SimpleCLIPModel(model)
 
 
 def load_torch_text_encoder(model_name):
@@ -111,21 +125,18 @@ def load_torch_text_encoder(model_name):
         from sbert_clip_script import SDistilBertTextEncoder
 
         return SDistilBertTextEncoder(model_name).eval()
-    elif model_name == "sentence-transformers/clip-ViT-B-32":
-        from sbert_clip_script import load_sbert_text_encoder
 
-        return load_sbert_text_encoder(model_name)
-
-    return CLIPTextModelWithProjection.from_pretrained(model_name).eval()
+    return CLIPTextModelWithProjection.from_pretrained(
+        model_name,
+        subfolder=HF_MODEL_SUBFOLDER_MAPPING.get(model_name, ""),
+    ).eval()
 
 
 def load_torch_image_encoder(model_name):
-    if model_name == "sentence-transformers/clip-ViT-B-32":
-        from sbert_clip_script import load_sbert_image_encoder
-
-        return load_sbert_image_encoder(model_name)
-
-    return CLIPVisionModelWithProjection.from_pretrained(model_name).eval()
+    return CLIPVisionModelWithProjection.from_pretrained(
+        model_name,
+        subfolder=HF_MODEL_SUBFOLDER_MAPPING.get(model_name, ""),
+    ).eval()
 
 
 def hfdataset_pre_process_for_clip(
@@ -232,7 +243,7 @@ def pre_process_dataset(
     dataset = hfdataset_pre_process_for_clip(
         dataset,
         processor,
-        torch_model=torch_model,
+        torch_model=torch_model if generate_ground_truth else None,
         image_col=image_col,
         caption_col=caption_col,
         label_col=label_col,

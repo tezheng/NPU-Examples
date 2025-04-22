@@ -59,7 +59,7 @@
       "pre_process_data_config": {
         "type": "pre_process_dataset",
         "model_name": "openai/clip-vit-base-patch16",
-        "input_col": "caption",
+        "caption_col": "caption",
         "max_length": 77
       },
       "dataloader_config": { "batch_size": 1 },
@@ -87,26 +87,7 @@
     }
   ],
   "evaluators": {
-    "performance": {
-      "metrics": [
-        {
-          "name": "latency",
-          "type": "latency",
-          "sub_types": [
-            {
-              "name": "avg",
-              "priority": 1,
-              "metric_config": { "warmup_num": 20, "repeat_test_num": 100 }
-            },
-            {
-              "name": "p90",
-              "metric_config": { "warmup_num": 20, "repeat_test_num": 100 }
-            }
-          ]
-        }
-      ]
-    },
-    "degradation": {
+    "sanity_check": {
       "metrics": [
         {
           "name": "degrad",
@@ -126,6 +107,21 @@
               "batch_size": 32
             }
           }
+        },
+        {
+          "name": "latency",
+          "type": "latency",
+          "sub_types": [
+            {
+              "name": "avg",
+              "priority": 2,
+              "metric_config": { "warmup_num": 20, "repeat_test_num": 100 }
+            },
+            {
+              "name": "p90",
+              "metric_config": { "warmup_num": 20, "repeat_test_num": 100 }
+            }
+          ]
         }
       ]
     }

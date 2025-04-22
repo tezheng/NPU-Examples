@@ -8,8 +8,8 @@
       "input_shapes": [[1, 3, 224, 224]],
       "output_names": ["embeds"]
     },
-    "model_loader": "load_sbert_image_encoder",
-    "model_script": "sbert_clip_script.py"
+    "model_loader": "load_image_encoder",
+    "model_script": "clip_script.py"
   },
   "passes": {
     "conversion": {
@@ -81,26 +81,7 @@
     }
   ],
   "evaluators": {
-    "performance": {
-      "metrics": [
-        {
-          "name": "latency",
-          "type": "latency",
-          "sub_types": [
-            {
-              "name": "avg",
-              "priority": 1,
-              "metric_config": { "warmup_num": 20, "repeat_test_num": 100 }
-            },
-            {
-              "name": "p90",
-              "metric_config": { "warmup_num": 20, "repeat_test_num": 100 }
-            }
-          ]
-        }
-      ]
-    },
-    "degradation": {
+    "sanity_check": {
       "metrics": [
         {
           "name": "degrad",
@@ -120,6 +101,21 @@
               "batch_size": 32
             }
           }
+        },
+        {
+          "name": "latency",
+          "type": "latency",
+          "sub_types": [
+            {
+              "name": "avg",
+              "priority": 2,
+              "metric_config": { "warmup_num": 20, "repeat_test_num": 100 }
+            },
+            {
+              "name": "p90",
+              "metric_config": { "warmup_num": 20, "repeat_test_num": 100 }
+            }
+          ]
         }
       ]
     }
