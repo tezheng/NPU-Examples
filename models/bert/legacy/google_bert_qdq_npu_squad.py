@@ -4,12 +4,11 @@ import torch
 from datasets import load_dataset
 from evaluate import load
 from transformers import (
-    AutoTokenizer,
+    AutoTokenizer,  # noqa: F401
     AutoModelForQuestionAnswering as AutoModelQA,
 )
 
 from bert_common import SimpleBert
-import bert_script  # noqa: F401
 
 
 def load_model(model_name: str) -> torch.nn.Module:
@@ -20,7 +19,7 @@ def load_model(model_name: str) -> torch.nn.Module:
 
 def eval_squad(
     outputs,
-    targets,
+    indices,
     dataset_config: Dict[str, str],
     model_name: str,
     seq_length: int = 512,
@@ -34,7 +33,7 @@ def eval_squad(
     predictions = []
     references = []
 
-    for pred, i in zip(outputs.preds, targets):
+    for pred, i in zip(outputs.preds, indices):
         sample = dataset[int(i.item())]
         offset_mapping = tokenizer(
             sample["question"],
@@ -43,7 +42,7 @@ def eval_squad(
             max_length=seq_length,
             truncation=True,
             return_offsets_mapping=True,
-            return_tensors="pt"
+            return_tensors="pt",
         ).offset_mapping
 
         start_logits, end_logits = pred.unbind(dim=0)
@@ -53,17 +52,21 @@ def eval_squad(
         answer_end = offset_mapping[:, end_index, 1].squeeze()
         pred_answer = sample["context"][answer_start:answer_end]
 
-        references.append({
-            "id": sample["id"],
-            "answers": {
-                "answer_start": sample["answers"]["answer_start"],
-                "text": sample["answers"]["text"],
-            },
-        })
-        predictions.append({
-            "id": sample["id"],
-            "prediction_text": pred_answer,
-        })
+        references.append(
+            {
+                "id": sample["id"],
+                "answers": {
+                    "answer_start": sample["answers"]["answer_start"],
+                    "text": sample["answers"]["text"],
+                },
+            }
+        )
+        predictions.append(
+            {
+                "id": sample["id"],
+                "prediction_text": pred_answer,
+            }
+        )
 
     results = load("squad").compute(
         predictions=predictions,

@@ -8,7 +8,7 @@ from transformers import AutoTokenizer
 from datasets import load_dataset
 from evaluate import load
 
-from bert_common import tokenize_hfdataset
+from bert_common import tokenize_hfdataset2
 from qnpumodel import QNPUBertModel
 from utils.npumodel import ModelOutput
 
@@ -21,7 +21,8 @@ def inference(
     label_col=None,
     device="npu",
     batch_size=128,
-):
+    max_samples=None,
+) -> ModelOutput:
     model = QNPUBertModel(
         qnpu_model_path,
         device=device,
@@ -29,16 +30,17 @@ def inference(
             "disable_cpu_fallback": "0",
         },
     )
-    tokenized_dataset = tokenize_hfdataset(
+    items = tokenize_hfdataset2(
         dataset,
         tokenizer,
         input_cols=input_cols,
         label_col=label_col,
         seq_length=model.sequence_length,
+        max_samples=max_samples,
     )
 
     all_outputs = []
-    dataloader = DataLoader(tokenized_dataset, batch_size=batch_size)
+    dataloader = DataLoader(items, batch_size=batch_size)
     for batch in dataloader:
         all_outputs.append(model(**batch))
 
@@ -190,7 +192,6 @@ if __name__ == "__main__":
             split="train",
         )
         input_cols = ["sentence1", "sentence2"]
-    ds = ds.select(range(min(max_samples, len(ds))))
 
     outputs = inference(
         tokenizer=tokenizer,
@@ -199,6 +200,7 @@ if __name__ == "__main__":
         input_cols=input_cols,
         device=device,
         batch_size=batch_size,
+        max_samples=max_samples,
     )
     preds = outputs[0].argmax(dim=-1)
 

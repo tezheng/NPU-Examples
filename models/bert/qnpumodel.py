@@ -155,22 +155,18 @@ class QNPUBertModel(torch.nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
     ) -> ModelOutput:
         batch_sz, seq_length = input_ids.shape
         assert seq_length == self.qnpu_session.sequence_length
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_ids.shape).long()
-        if position_ids is None:
-            position_ids = torch.arange(seq_length).long().expand(batch_sz, -1)
         if attention_mask.dim() == 2:
             attention_mask = create_4d_mask(attention_mask, input_ids.shape)
         inputs = {
             "input_ids": input_ids.int(),
             "attention_mask": attention_mask.float(),
             "token_type_ids": token_type_ids.int(),
-            "position_ids": position_ids.int(),
         }
         outputs = self.qnpu_session.run(inputs)
         return ModelOutput(**outputs)

@@ -3,19 +3,13 @@
     "type": "PyTorchModel",
     "model_path": "google-bert/bert-large-cased-whole-word-masking-finetuned-squad",
     "io_config": {
-      "input_names": [
-        "input_ids",
-        "attention_mask",
-        "token_type_ids",
-        "position_ids"
-      ],
+      "input_names": ["input_ids", "attention_mask", "token_type_ids"],
       "input_shapes": [
         [1, 512],
         [1, 1, 512, 512],
-        [1, 512],
         [1, 512]
       ],
-      "input_types": ["int32", "float32", "int32", "int32"],
+      "input_types": ["int32", "float32", "int32"],
       "output_names": ["start_logits", "end_logits"],
       "dynamic_axes": {
         "input_ids": { "0": "batch_size", "1": "sequence_length" },
@@ -25,7 +19,6 @@
           "3": "sequence_length"
         },
         "token_type_ids": { "0": "batch_size", "1": "sequence_length" },
-        "position_ids": { "0": "batch_size", "1": "sequence_length" },
         "logits": { "0": "batch_size" }
       }
     },
@@ -40,7 +33,7 @@
     "clean_cache": true,
     "clean_evaluation_cache": true,
     "evaluator": "squad_evaluator",
-    "evaluate_input_model": true,
+    "evaluate_input_model": false,
     "output_dir": "outputs/google/bert_large_cased_qa"
   },
   "systems": {
@@ -63,18 +56,16 @@
       "type": "HuggingfaceContainer",
       "load_dataset_config": {
         "data_name": "squad",
-        "split": "train"
+        "split": "train[:12]"
       },
       "pre_process_data_config": {
         "type": "tokenize_dataset",
         "model_name": "google-bert/bert-large-cased-whole-word-masking-finetuned-squad",
         "input_cols": ["question", "context"],
-        "label_col": "idx",
-        "seq_length": 512,
-        "max_samples": 10
+        "seq_length": 512
       },
       "dataloader_config": { "batch_size": 1 },
-      "user_script": "google_bert_qdq_npu_squad.py",
+      "user_script": "bert_script.py",
       "script_dir": "."
     },
     {
@@ -90,13 +81,13 @@
         "input_cols": ["question", "context"],
         "label_col": "idx",
         "seq_length": 512,
-        "max_samples": 100
+        "max_samples": 1700
       },
       "post_process_data_config": {
         "type": "bert_qa_post_process"
       },
       "dataloader_config": { "batch_size": 1 },
-      "user_script": "google_bert_qdq_npu_squad.py"
+      "user_script": "bert_script.py"
     }
   ],
   "evaluators": {
@@ -131,11 +122,7 @@
           "name": "perf_latency",
           "type": "latency",
           "data_config": "eval_data",
-          "sub_types": [
-            { "name": "avg", "warmup_num": 2, "repeat_test_num": 10 },
-            { "name": "p75", "warmup_num": 2, "repeat_test_num": 10 },
-            { "name": "p90", "warmup_num": 2, "repeat_test_num": 10 }
-          ],
+          "sub_types": [{ "name": "avg" }, { "name": "p90" }],
           "user_config": {
             "inference_settings": {
               "onnx": {
@@ -158,6 +145,7 @@
       "device": "cpu",
       "type": "OnnxConversion",
       "target_opset": 17,
+      "dynamic": true,
       "use_dynamo_exporter": false
     },
     "to_fixed_shape": {
@@ -174,7 +162,9 @@
       "data_config": "calibration_data",
       "quant_preprocess": true,
       "activation_type": "QUInt16",
-      "weight_type": "QUInt8"
+      "weight_type": "QUInt8",
+      "save_as_external_data": true,
+      "all_tensors_to_one_file": true
     }
   }
 }

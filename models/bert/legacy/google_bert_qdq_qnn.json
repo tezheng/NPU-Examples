@@ -3,19 +3,13 @@
     "type": "PyTorchModel",
     "model_path": "google-bert/bert-base-multilingual-cased",
     "io_config": {
-      "input_names": [
-        "input_ids",
-        "attention_mask",
-        "token_type_ids",
-        "position_ids"
-      ],
+      "input_names": ["input_ids", "attention_mask", "token_type_ids"],
       "input_shapes": [
         [1, 512],
         [1, 1, 512, 512],
-        [1, 512],
         [1, 512]
       ],
-      "input_types": ["int32", "float32", "int32", "int32"],
+      "input_types": ["int32", "float32", "int32"],
       "output_names": ["logits"],
       "dynamic_axes": {
         "input_ids": { "0": "batch_size", "1": "sequence_length" },
@@ -25,12 +19,11 @@
           "3": "sequence_length"
         },
         "token_type_ids": { "0": "batch_size", "1": "sequence_length" },
-        "position_ids": { "0": "batch_size", "1": "sequence_length" },
         "logits": { "0": "batch_size" }
       }
     },
     "model_loader": "load_bert_nsp_model",
-    "model_script": "google_bert_glue_mrpc_qdq_qnn.py",
+    "model_script": "bert_script.py",
     "script_dir": "."
   },
   "engine": {
@@ -78,19 +71,43 @@
       "dataloader_config": { "batch_size": 1 }
     },
     {
-      "name": "eval_data",
+      "name": "wiki_data",
       "type": "HuggingfaceContainer",
       "load_dataset_config": {
-        "data_name": "glue",
-        "subset": "mrpc",
-        "split": "test[:100]"
+        "type": "dataset_to_nsp_dataset",
+        "data_name": "wikitext",
+        "subset": "wikitext-2-raw-v1",
+        "split": "train",
+        "input_cols": ["sentence1", "sentence2"],
+        "label_col": "label"
       },
       "pre_process_data_config": {
         "type": "tokenize_dataset",
+        "model_name": "google-bert/bert-base-multilingual-cased",
+        "input_cols": ["sentence1", "sentence2"],
+        "label_col": "label",
+        "seq_length": 512
+      },
+      "post_process_data_config": {
+        "type": "bert_scl_post_process"
+      },
+      "dataloader_config": { "batch_size": 1 },
+      "user_script": "bert_script.py"
+    },
+    {
+      "name": "eval_data",
+      "type": "HuggingfaceContainer",
+      "load_dataset_config": {
+        "type": "load_csv_dataset",
+        "data_file": "nsp_wikitext_pairs.csv"
+      },
+      "pre_process_data_config": {
+        "type": "tokenize_dataset",
+        "model_name": "google-bert/bert-base-multilingual-cased",
         "input_cols": ["sentence1", "sentence2"],
         "label_col": "label",
         "seq_length": 512,
-        "model_name": "google-bert/bert-base-multilingual-cased"
+        "max_samples": 100
       },
       "post_process_data_config": {
         "type": "bert_scl_post_process"
@@ -103,17 +120,32 @@
     "glue_evaluator": {
       "metrics": [
         {
-          "name": "perf_latency",
-          "type": "latency",
+          "name": "nsp",
+          "type": "accuracy",
+          "backend": "huggingface_metrics",
           "data_config": "eval_data",
           "sub_types": [
             {
-              "name": "avg",
-              "warmup_num": 5,
-              "repeat_test_num": 20,
-              "priority": 1
+              "name": "accuracy",
+              "priority": 1,
+              "goal": { "type": "max-degradation", "value": 0.05 }
             },
-            { "name": "p90", "warmup_num": 5, "repeat_test_num": 20 }
+            { "name": "f1" }
+          ]
+        },
+        {
+          "name": "perf_latency",
+          "type": "latency",
+          "sub_types": [
+            {
+              "name": "avg",
+              "priority": 2,
+              "metric_config": { "warmup_num": 20, "repeat_test_num": 500 }
+            },
+            {
+              "name": "p90",
+              "metric_config": { "warmup_num": 20, "repeat_test_num": 500 }
+            }
           ],
           "user_config": {
             "inference_settings": {
@@ -134,10 +166,9 @@
   },
   "passes": {
     "conversion": {
-      "device": "cpu",
       "type": "OnnxConversion",
       "target_opset": 17,
-      "dynamic": false,
+      "dynamic": true,
       "use_dynamo_exporter": false
     },
     "to_fixed_shape": {
@@ -145,16 +176,31 @@
       "dim_param": ["batch_size", "sequence_length"],
       "dim_value": [1, 512]
     },
-    "qnn_preprocess": {
-      "type": "QNNPreprocess",
-      "fuse_layernorm": true
+    "surgery": {
+      "type": "GraphSurgeries",
+      "surgeries": [{ "surgeon": "MatMulAddToGemm" }]
+    },
+    "transformer_optimizer": {
+      "type": "OrtTransformersOptimization",
+      "model_type": "bert",
+      "opt_level": 1,
+      "optimization_options": {
+        "enable_gelu": true,
+        "enable_bias_gelu": false,
+        "enable_layer_norm": true,
+        "enable_skip_layer_norm": false,
+        "enable_bias_skip_layer_norm": false,
+        "enable_attention": false
+      }
     },
     "quantization": {
       "type": "OnnxStaticQuantization",
       "data_config": "calibration_data",
       "quant_preprocess": true,
       "activation_type": "QUInt16",
-      "weight_type": "QUInt8"
+      "weight_type": "QUInt8",
+      "save_as_external_data": true,
+      "all_tensors_to_one_file": true
     }
   }
 }

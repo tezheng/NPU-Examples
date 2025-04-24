@@ -2,8 +2,10 @@ from typing import List, Optional, Tuple, Union, TYPE_CHECKING
 from dataclasses import dataclass
 from pathlib import Path
 
+from tqdm.auto import tqdm
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
 from transformers import BertModel
 from transformers.modeling_outputs import ModelOutput as _ModelOutput
 
@@ -48,12 +50,10 @@ class SimpleBert(torch.nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         token_type_ids: torch.Tensor,
-        position_ids: torch.Tensor,
         **kwargs,
     ) -> ModelOutput:
         embedding_output = self.embeddings(
             input_ids=input_ids,
-            position_ids=position_ids,
             token_type_ids=token_type_ids,
         )
         sequence_output = self.encoder(
@@ -93,7 +93,7 @@ def tokenize_hfdataset(
     dataset: "Dataset",
     tokenizer: "Union[PreTrainedTokenizer, PreTrainedTokenizerFast]",
     input_cols: List[str],
-    label_col: Optional[str] = None,
+    label_col: str = "label",
     seq_length: int = 512,
     max_samples: Optional[int] = None,
 ):
@@ -113,7 +113,6 @@ def tokenize_hfdataset(
             encoded_input.attention_mask,
             (batch_sz, seq_length),
         )
-        position_ids = torch.arange(seq_length).expand(batch_sz, -1)
         token_type_ids = (
             encoded_input.token_type_ids
             if "token_type_ids" in encoded_input
@@ -124,7 +123,6 @@ def tokenize_hfdataset(
             **{
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
-                "position_ids": position_ids,
                 "token_type_ids": token_type_ids,
             },
             **(
@@ -144,15 +142,66 @@ def tokenize_hfdataset(
         remove_columns=dataset.column_names,
     )
 
-    def enforce_dtype(batch):
-        batch = {k: torch.Tensor(v) for k, v in batch.items()}
-        batch["input_ids"] = batch["input_ids"].int()
-        if "position_ids" in batch:
-            batch["position_ids"] = batch["position_ids"].int()
-        if "token_type_ids" in batch:
-            batch["token_type_ids"] = batch["token_type_ids"].int()
-        return batch
-
-    tokenized_datasets.set_transform(enforce_dtype)
+    tokenized_datasets.set_format("torch", output_all_columns=True)
 
     return tokenized_datasets
+
+
+def tokenize_hfdataset2(
+    dataset: "Dataset",
+    tokenizer: "Union[PreTrainedTokenizer, PreTrainedTokenizerFast]",
+    input_cols: List[str],
+    label_col: Optional[str] = None,
+    seq_length: int = 512,
+    max_samples: Optional[int] = None,
+    batch_size: int = 1024,
+):
+    if max_samples is not None and max_samples < len(dataset):
+        dataset = dataset.select(range(max_samples))
+
+    all_items = []
+    loader = DataLoader(dataset, batch_size=batch_size)
+    for i, sample in tqdm(enumerate(loader)):
+        encoded_input = tokenizer(
+            *[sample[input_col] for input_col in input_cols],
+            padding="max_length",
+            max_length=seq_length,
+            truncation=True,
+            add_special_tokens=True,
+            return_tensors="pt",
+        )
+
+        batch_sz = encoded_input.input_ids.shape[0]
+        input_ids = encoded_input.input_ids
+        attention_mask = create_4d_mask(
+            encoded_input.attention_mask,
+            (batch_sz, seq_length),
+        )
+        token_type_ids = (
+            encoded_input.token_type_ids
+            if "token_type_ids" in encoded_input
+            else torch.zeros(seq_length).expand(batch_sz, -1)
+        )
+
+        batch = {
+            **{
+                "input_ids": input_ids.int(),
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids.int(),
+            },
+            **(
+                {
+                    label_col: sample.get(
+                        label_col,
+                        range(i * batch_size, i * batch_size + batch_sz),
+                    )
+                }
+                if label_col is not None
+                else {}
+            ),
+        }
+
+        items = [dict(zip(batch.keys(), sample)) for sample in zip(*batch.values())]
+        all_items.extend(items)
+
+    return all_items
