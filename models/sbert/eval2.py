@@ -1,3 +1,4 @@
+from itertools import chain
 from pathlib import Path
 from time import perf_counter
 
@@ -11,8 +12,7 @@ from qnpumodel import QNPUBertModel
 
 
 # Mean Pooling - Take attention mask into account for correct averaging
-def mean_pooling(model_output, attention_mask):
-    token_embeddings = model_output[0]
+def mean_pooling(token_embeddings, attention_mask):
     input_mask_expanded = (
         attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     )
@@ -66,8 +66,13 @@ if __name__ == "__main__":
     )
     torch_model = AutoModel.from_pretrained(args.model_name).eval()
 
-    dataset = load_dataset("glue", "mrpc", split="test[:100]")
-    sentences = dataset["sentence1"] + dataset["sentence2"]
+    # dataset = load_dataset("glue", "mrpc", split="test[:100]")
+    # sentences = dataset["sentence1"] + dataset["sentence2"]
+    dataset = load_dataset(
+        "nlphuji/flickr_1k_test_image_text_retrieval",
+        split="test[:20]",
+    )
+    sentences = list(chain(*dataset["caption"]))
     encoded_input = tokenizer(
         sentences,
         padding="max_length",
@@ -81,7 +86,8 @@ if __name__ == "__main__":
     outputs = model(**encoded_input)
     print(f"NPU inference: {round((perf_counter() - start) * 1000)}ms")
 
-    embeds_1 = mean_pooling(outputs, encoded_input["attention_mask"])
+    # embeds_1 = outputs[0]
+    embeds_1 = mean_pooling(outputs[1], encoded_input["attention_mask"])
     embeds_1 = torch.matmul(embeds_1, dense_weights.T)
     embeds_1 = F.normalize(embeds_1, p=2, dim=1)
 
@@ -89,7 +95,7 @@ if __name__ == "__main__":
         start = perf_counter()
         model_output = torch_model(**encoded_input)
         print(f"CPU inference: {round((perf_counter() - start) * 1000)}ms")
-        embeds_2 = mean_pooling(model_output, encoded_input["attention_mask"])
+        embeds_2 = mean_pooling(model_output[0], encoded_input["attention_mask"])
         embeds_2 = torch.matmul(embeds_2, dense_weights.T)
         embeds_2 = F.normalize(embeds_2, p=2, dim=1)
 

@@ -57,12 +57,12 @@
       "type": "HuggingfaceContainer",
       "load_dataset_config": {
         "data_name": "squad",
-        "split": "validation[:12]"
+        "split": "train[:12]"
       },
       "pre_process_data_config": {
         "type": "tokenize_dataset_causal_mask",
         "model_name": "google-bert/bert-large-cased-whole-word-masking-finetuned-squad",
-        "input_cols": ["context", "question"],
+        "input_cols": ["question", "context"],
         "max_length": 512
       },
       "dataloader_config": { "batch_size": 1 },
@@ -91,7 +91,7 @@
                 "data_name": "squad",
                 "split": "validation"
               },
-              "max_samples": 100000
+              "max_samples": 1000
             },
             "user_script": "google_bert_script.py"
           }

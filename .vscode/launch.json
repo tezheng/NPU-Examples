@@ -17,6 +17,28 @@
       }
     },
     {
+      "name": "Python Debugger: Current File with Args",
+      "type": "debugpy",
+      "request": "launch",
+      "justMyCode": false,
+      "program": "${file}",
+      "cwd": "${fileDirname}",
+      "console": "integratedTerminal",
+      "args": [
+        "--model",
+        "laion/clip-vit-b-32-laion2b-s34b-b79k",
+        "--text-encoder",
+        "D:/olive/examples/clip/qdq/models/laion/clip_b32/text/model.onnx",
+        "--image-encoder",
+        "D:/olive/examples/clip/qdq/models/laion/clip_b32/image/model.onnx",
+        "--dataset",
+        "nlphuji/flickr_1k_test_image_text_retrieval"
+      ],
+      "env": {
+        "PYTHONPATH": "D:/NPU/NPU-Examples"
+      }
+    },
+    {
       "name": "Python Debugger: Current Module",
       "type": "debugpy",
       "request": "launch",
@@ -56,8 +78,13 @@
       "module": "olive.workflows.run",
       "console": "integratedTerminal",
       "justMyCode": false,
-      "args": ["--config", "openai_clip_text_b32_qdq.json"],
-      "cwd": "${workspaceFolder}/models/clip/",
+      "args": [
+        "--config",
+        "./google_vit_b16_qdq.json",
+        "--package-config",
+        "./olive_config.json"
+      ],
+      "cwd": "${workspaceFolder}/models/vit/",
       "env": {
         "PYTHONPATH": "${workspaceFolder}"
       }
@@ -83,6 +110,26 @@
       "program": "${workspaceFolder}/models/llm/deepseek/",
       "cwd": "${workspaceFolder}/models/llm/deepseek/",
       "args": ["--quantize-qdq", "--skip-prefill", "--skip-pre-process"],
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
+    {
+      "name": "Eval with Olive",
+      "type": "debugpy",
+      "request": "launch",
+      "justMyCode": false,
+      "program": "${workspaceFolder}/utils/olive_eval.py",
+      "cwd": "${workspaceFolder}/models/clip/qdq/",
+      "args": [
+        "--target",
+        "npu",
+        "--config",
+        "./openai_clip_text_b32_qdq.json",
+        "--evaluator",
+        "sanity_check"
+      ],
       "console": "integratedTerminal",
       "env": {
         "PYTHONPATH": "${workspaceFolder}"

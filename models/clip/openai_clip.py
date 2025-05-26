@@ -1,13 +1,11 @@
 from typing import (
     Dict,
     OrderedDict,
-    List,
     Optional,
     Tuple,
     Union,
     TYPE_CHECKING,
 )
-from dataclasses import dataclass
 from random import Random
 
 import torch
@@ -17,7 +15,6 @@ from transformers import (
     CLIPTextModelWithProjection,
     CLIPVisionModelWithProjection,
 )
-from transformers.modeling_outputs import ModelOutput as _ModelOutput
 
 from olive.data.component.dataset import BaseDataset
 from olive.data.registry import Registry
@@ -28,6 +25,9 @@ if TYPE_CHECKING:
 
 
 def load_text_encoder(model_name):
+    from dataclasses import dataclass
+    from transformers.modeling_outputs import ModelOutput as _ModelOutput
+
     @dataclass
     class ModelOutput(_ModelOutput):
         """Wrapper for ModelOutput class from transformers.modeling_outputs.
@@ -69,8 +69,8 @@ def load_text_encoder(model_name):
                 torch.arange(last_hidden_state.shape[0]),
                 input_ids.argmax(dim=-1),
             ]
-
             text_embeds = self.text_projection(pooled_output)
+
             return ModelOutput(
                 text_embeds=text_embeds,
                 last_hidden_state=last_hidden_state,
@@ -144,16 +144,16 @@ def create_4d_mask(
 def tokenize_hfdataset(
     dataset: "Dataset",
     tokenizer: "Union[PreTrainedTokenizer, PreTrainedTokenizerFast]",
-    input_cols: List[str],
+    input_col: str,
     label_col: str = "label",
-    seq_length: int = 512,
+    max_length: int = 512,
     max_samples: Optional[int] = None,
 ):
     def generate_inputs(sample, indices):
         encoded_input = tokenizer(
-            [i[0] for i in sample[input_cols[0]]],
+            text=[x[0] for x in sample[input_col]],
             padding="max_length",
-            max_length=seq_length,
+            max_length=max_length,
             truncation=True,
             add_special_tokens=True,
             return_tensors="pt",
@@ -163,7 +163,7 @@ def tokenize_hfdataset(
         input_ids = encoded_input.input_ids
         attention_mask = create_4d_mask(
             encoded_input.attention_mask,
-            (batch_sz, seq_length),
+            (batch_sz, max_length),
         )
 
         return {
@@ -182,12 +182,13 @@ def tokenize_hfdataset(
         remove_columns=dataset.column_names,
     )
 
-    def enforce_dtype(batch):
-        batch = {k: torch.Tensor(v) for k, v in batch.items()}
-        batch["input_ids"] = batch["input_ids"].int()
-        return batch
+    # def enforce_dtype(batch):
+    #     batch = {k: torch.Tensor(v) for k, v in batch.items()}
+    #     batch["input_ids"] = batch["input_ids"].int()
+    #     return batch
+    # tokenized_datasets.set_transform(enforce_dtype)
 
-    tokenized_datasets.set_transform(enforce_dtype)
+    tokenized_datasets.set_format("torch", output_all_columns=True)
 
     return tokenized_datasets
 
@@ -196,19 +197,19 @@ def tokenize_hfdataset(
 def tokenize_dataset(
     dataset,
     model_name: str,
-    input_cols: List[str],
+    input_col: str,
     max_samples: Optional[int],
     label_col: str = "label",
-    seq_length: int = 512,
+    max_length: int = 512,
     **kwargs,
 ):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     dataset = tokenize_hfdataset(
         dataset,
         tokenizer,
-        input_cols,
+        input_col,
         label_col=label_col,
-        seq_length=seq_length,
+        max_length=max_length,
         max_samples=max_samples,
     )
     return BaseDataset(list(dataset), label_col)

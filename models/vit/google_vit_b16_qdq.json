@@ -16,6 +16,10 @@
       "dim_param": ["batch_size", "num_channels", "height", "width"],
       "dim_value": [1, 3, 224, 224]
     },
+    "surgery": {
+      "type": "GraphSurgeries",
+      "surgeries": [{ "surgeon": "MatMulAddToGemm" }]
+    },
     "transformer_optimizer": {
       "type": "OrtTransformersOptimization",
       "model_type": "vit",
@@ -29,12 +33,19 @@
         "enable_attention": false
       }
     },
-    "OnnxQuantization": {
-      "type": "OnnxQuantization",
+    "quantization": {
+      "type": "OnnxStaticQuantization",
       "data_config": "calib_data",
       "quant_preprocess": true,
       "activation_type": "QUInt16",
       "weight_type": "QUInt8"
+    },
+    "addmetadata": {
+      "type": "VitisAIAddMetaData",
+      "config_meta_data_keys": ["architectures", "model_type"],
+      "activation_type": "QUInt16",
+      "weight_type": "QUInt8",
+      "quant_type": "OnnxStaticQuantization"
     }
   },
   "data_configs": [
@@ -47,12 +58,11 @@
       },
       "pre_process_data_config": {
         "type": "image_pre_process",
-        "model_name": "google/vit-base-patch16-224",
         "input_col": "image",
         "label_col": "label"
       },
       "dataloader_config": { "batch_size": 1 },
-      "user_script": "image_script.py"
+      "user_script": "imagenet_script.py"
     },
     {
       "name": "eval_data",
@@ -63,36 +73,47 @@
       },
       "pre_process_data_config": {
         "type": "image_pre_process",
-        "model_name": "google/vit-base-patch16-224",
         "input_col": "image",
         "label_col": "label"
       },
       "post_process_data_config": { "type": "image_post_process" },
       "dataloader_config": { "batch_size": 1 },
-      "user_script": "image_script.py"
+      "user_script": "imagenet_script.py"
     }
   ],
   "evaluators": {
-    "mini_imagenet": {
+    "cls_mini_imagenet": {
       "metrics": [
         {
           "name": "top1",
-          "type": "accuracy",
+          "type": "custom",
           "data_config": "eval_data",
           "sub_types": [
-            {
-              "name": "accuracy_score",
-              "priority": 1,
-              "metric_config": { "task": "multiclass", "num_classes": 1000 }
-            }
-          ]
+            { "name": "accuracy", "priority": 1, "higher_is_better": true },
+            { "name": "f1", "higher_is_better": true }
+          ],
+          "user_config": {
+            "metric_func": "eval_accu_and_f1",
+            "metric_func_kwargs": { "average": "macro" },
+            "user_script": "imagenet_script.py"
+          }
         },
+        {
+          "name": "latency",
+          "type": "latency",
+          "sub_types": [{ "name": "avg" }]
+        }
+      ]
+    },
+    "performance": {
+      "metrics": [
         {
           "name": "latency",
           "type": "latency",
           "sub_types": [
             {
               "name": "avg",
+              "priority": 1,
               "metric_config": { "warmup_num": 20, "repeat_test_num": 100 }
             },
             {
@@ -104,6 +125,8 @@
       ]
     }
   },
+  "clean_cache": true,
+  "clean_evaluation_cache": true,
   "evaluate_input_model": false,
   "output_dir": "models/google/vit_b16_224"
 }

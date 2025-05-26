@@ -17,6 +17,9 @@ from olive.data.registry import Registry
 from olive.model import OliveModelHandler
 
 
+mask_val = -50.0
+
+
 class CLIPTextEncoder(torch.nn.Module):
     def __init__(self, model):
         super().__init__()
@@ -31,8 +34,15 @@ class CLIPTextEncoder(torch.nn.Module):
         input_ids,
         attention_mask,
     ):
-        inputs_embeds = self.embeddings(input_ids)
-        encoder_outputs = self.encoder(inputs_embeds, attention_mask)
+        ctx_len = input_ids.shape[-1]
+        causal_attention_mask = torch.full(
+            (ctx_len + 1, ctx_len), fill_value=mask_val
+        ).triu(diagonal=1)[:ctx_len,]
+        encoder_outputs = self.encoder(
+            inputs_embeds=self.embeddings(input_ids),
+            attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
+        )
         last_hidden_state = self.final_layer_norm(encoder_outputs[0])
 
         pooled_output = last_hidden_state[
@@ -150,12 +160,12 @@ def hfdataset_pre_process_for_clip(
     max_length: int = 77,
     batch_size: int = 32,
 ):
-    def create_4d_mask(mask, input_shape, masked_value: float = -50.0):
+    def create_4d_mask(mask, input_shape):
         # (batch_size, num_heads, seq_len, head_dim)
         batch_sz, seq_len = input_shape
         expanded_mask = mask[:, None, None, :].expand(batch_sz, 1, seq_len, seq_len)
         inverted_mask = 1.0 - expanded_mask.float()
-        return inverted_mask.masked_fill(inverted_mask.bool(), masked_value)
+        return inverted_mask.masked_fill(inverted_mask.bool(), mask_val)
 
     def generate_inputs(sample, indices):
         captions = sample.get(caption_col, None)

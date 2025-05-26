@@ -1,17 +1,21 @@
+from __future__ import annotations
+
 import logging
+from types import MappingProxyType
 
 from colorama import Fore, Style
 
 
 class ColorFormatter(logging.Formatter):
-    COLORS = {
-        logging.DEBUG: Style.DIM + Fore.CYAN,
-        logging.INFO: Fore.GREEN,
-        logging.WARNING: Fore.YELLOW,
-        logging.ERROR: Fore.RED,
-        logging.CRITICAL: Style.BRIGHT + Fore.RED,
-    }
-
+    COLORS = MappingProxyType(
+        {
+            logging.DEBUG: Style.DIM + Fore.CYAN,
+            logging.INFO: Fore.GREEN,
+            logging.WARNING: Fore.YELLOW,
+            logging.ERROR: Fore.RED,
+            logging.CRITICAL: Style.BRIGHT + Fore.RED,
+        }
+    )
     RESET = Style.RESET_ALL
 
     def format(self, record):
@@ -35,9 +39,7 @@ def get_logger(name: str, level=logging.WARNING):
 
 
 def set_logger_level(logger, level):
-    """
-    Set the logging level for the given logger and all its handlers.
-    """
+    """Set the logging level for the given logger and all its handlers."""
     logger.setLevel(level)
     if not logger.handlers:  # Add handler if none exist
         handler = logging.StreamHandler()

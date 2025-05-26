@@ -176,7 +176,13 @@ Desktop.ini
 **/tmp*
 **/temp*
 
-# others
+# olive cache
 **/outputs*
+**/.olive_cache/*
+**/.olive-cache/*
+models/**/models/
+!*/models/
+
+# others
 transcript.txt
 qnpu_profile.csv

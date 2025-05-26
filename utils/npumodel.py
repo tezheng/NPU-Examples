@@ -1,3 +1,4 @@
+from types import MappingProxyType
 from typing import Dict, Optional, Tuple, Union
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,91 @@ from transformers.modeling_outputs import ModelOutput as _ModelOutput
 
 import torch
 from torch.utils.data import DataLoader
+
+
+def get_ort_ep_policy(p):
+    from onnxruntime import OrtExecutionProviderDevicePolicy as Policy
+
+    mapping = MappingProxyType(
+        {
+            "DEFAULT": Policy.DEFAULT,
+            "PREFER_CPU": Policy.PREFER_CPU,
+            "PREFER_GPU": Policy.PREFER_GPU,
+            "PREFER_NPU": Policy.PREFER_NPU,
+            "MAX_PERFORMANCE": Policy.MAX_PERFORMANCE,
+            "MAX_EFFICIENCY": Policy.MAX_EFFICIENCY,
+            "MIN_OVERALL_POWER": Policy.MIN_OVERALL_POWER,
+        }
+    )
+    return mapping.get(p)
+
+
+class OrtModule:
+    def __init__(self, model_path: Path, policy="PREFER_NPU", **kwargs) -> None:
+        self.model_path = model_path
+        self.session = self._init_ort_session(policy, **kwargs)
+
+        self._input_names = [i.name for i in self.session.get_inputs()]
+        self._outputs_names = [o.name for o in self.session.get_outputs()]
+        self._batch_size = self.session.get_inputs()[0].shape[0]
+        self._latency_trace = []
+
+    def _init_ort_session(self, policy, **kwargs):
+        policy = get_ort_ep_policy(policy)
+        if policy is None:
+            raise ValueError(f"Invalid EP selection policy: {policy}")
+
+        sess_options = ort.SessionOptions()
+        sess_options.set_provider_selection_policy(policy)
+
+        return ort.InferenceSession(
+            str(self.model_path),
+            sess_options=sess_options,
+        )
+
+    def run(self, tensors: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        inputs = {
+            name: tensor.split(self._batch_size, dim=0)
+            for name, tensor in tensors.items()
+            if name in self._input_names
+        }
+        missing_inputs = self._input_names - inputs.keys()
+        if missing_inputs:
+            raise RuntimeError(f"Missing inputs for ONNX model: {missing_inputs}")
+
+        # Split batches and convert torch tensors to numpy arrays
+        batches = [
+            dict(zip(inputs.keys(), [v.numpy() for v in values]))
+            for values in zip(*inputs.values())
+        ]
+        # Run the ONNX model
+        start = perf_counter()
+        outputs = [self.session.run(None, batch) for batch in tqdm(batches)]
+        self._latency_trace.append((len(batches), perf_counter() - start))
+
+        return dict(
+            zip(
+                self._outputs_names,
+                [torch.from_numpy(np.concatenate(a)) for a in zip(*outputs)],
+            )
+        )
+
+    @property
+    def batch_size(self):
+        return self._batch_size
+
+    @property
+    def latency(self):
+        latencies = np.concatenate(
+            [
+                np.full(num_batches, total_time / num_batches * 1000)
+                for num_batches, total_time in self._latency_trace
+            ]
+        )
+        return (
+            round(np.mean(latencies).item(), 2),
+            round(np.percentile(latencies, 90).item(), 2),
+        )
 
 
 class QNPUModule:
@@ -41,7 +127,7 @@ class QNPUModule:
 
     def _init_npu_session(self, **kwargs):
         disable_cpu_fallback = kwargs.get("disable_cpu_fallback", "0")
-        ep_context_enable = kwargs.get("ep_context_enable", "1")
+        ep_context_enable = kwargs.get("ep_context_enable", "0")
         ep_context_embed = kwargs.get("ep_context_embed", "0")
         htp_performance_mode = kwargs.get("htp_performance_mode", "burst")
         htp_graph_opt_mode = kwargs.get("htp_graph_optimization_mode", "3")
@@ -179,13 +265,13 @@ class ModelOutput(_ModelOutput):
         return super().__repr__()
 
 
-class QNPUBertModel(torch.nn.Module):
+class NPUBertModel(torch.nn.Module):
     def __init__(self, qnpu_model_path: Path, device="npu", *args, **kwargs) -> None:
         qnpu_config = kwargs.pop("qnpu_config", {})
 
         super().__init__(*args, **kwargs)
 
-        self.qnpu_session = QNPUModule(qnpu_model_path, device, **qnpu_config)
+        self.qnpu_session = OrtModule(qnpu_model_path, device, **qnpu_config)
 
     def forward(
         self,
@@ -215,13 +301,13 @@ class QNPUBertModel(torch.nn.Module):
         return self.qnpu_session.session.get_inputs()[0].shape[1]
 
 
-class QNPUImageModel(torch.nn.Module):
+class NPUImageModel(torch.nn.Module):
     def __init__(self, model_path: Path, device="npu", *args, **kwargs) -> None:
         qnpu_config = kwargs.pop("qnpu_config", {})
 
         super().__init__(*args, **kwargs)
 
-        self.npu_session = QNPUModule(model_path, device, **qnpu_config)
+        self.npu_session = OrtModule(model_path, device, **qnpu_config)
 
     def forward(
         self,
@@ -243,7 +329,7 @@ class QNPUImageModel(torch.nn.Module):
         )
 
 
-class QNPUCLIPModel:
+class NPUCLIPModel:
     def __init__(
         self,
         model_name: str,
@@ -253,8 +339,8 @@ class QNPUCLIPModel:
         from transformers import CLIPProcessor
 
         self.processor = CLIPProcessor.from_pretrained(model_name)
-        self.text_model = QNPUModule(text_model_path)
-        self.vision_model = QNPUModule(vision_model_path)
+        self.text_model = OrtModule(text_model_path)
+        self.vision_model = OrtModule(vision_model_path)
 
     def get_image_embedding(self, image):
         inputs = self.processor(images=image, return_tensors="pt")

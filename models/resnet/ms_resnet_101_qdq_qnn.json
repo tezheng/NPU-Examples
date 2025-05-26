@@ -18,8 +18,7 @@
     "conversion": {
       "type": "OnnxConversion",
       "target_opset": 17,
-      "save_as_external_data": true,
-      "all_tensors_to_one_file": true,
+      "dynamic": true,
       "use_dynamo_exporter": false
     },
     "to_fixed_shape": {
@@ -59,7 +58,7 @@
     "clean_cache": true,
     "clean_evaluation_cache": true,
     "evaluator": "common_evaluator",
-    "evaluate_input_model": true,
+    "evaluate_input_model": false,
     "log_to_file": false,
     "output_dir": "outputs/microsoft/resnet_101"
   },
@@ -73,6 +72,7 @@
       },
       "pre_process_data_config": {
         "type": "image_pre_process",
+        "model_name": "microsoft/resnet-101",
         "input_col": "image",
         "label_col": "label"
       },
@@ -89,10 +89,9 @@
       },
       "pre_process_data_config": {
         "type": "image_pre_process",
+        "model_name": "microsoft/resnet-101",
         "input_col": "image",
-        "label_col": "label",
-        "max_samples": 5000,
-        "shuffle": true
+        "label_col": "label"
       },
       "post_process_data_config": { "type": "image_post_process" },
       "dataloader_config": { "batch_size": 1 },
@@ -104,7 +103,7 @@
     "common_evaluator": {
       "metrics": [
         {
-          "name": "quality",
+          "name": "top1",
           "type": "accuracy",
           "data_config": "eval_data",
           "sub_types": [
@@ -116,21 +115,17 @@
           ]
         },
         {
-          "name": "performance",
+          "name": "latency",
           "type": "latency",
           "data_config": "eval_data",
-          "sub_types": [
-            { "name": "avg", "priority": 2 },
-            { "name": "p75" },
-            { "name": "p90" }
-          ],
+          "sub_types": [{ "name": "avg", "priority": 2 }, { "name": "p90" }],
           "user_config": {
             "inference_settings": {
               "onnx": {
                 "execution_provider": "QNNExecutionProvider",
                 "session_options": {
                   "extra_session_config": {
-                    "session.disable_cpu_ep_fallback": "0"
+                    "session.disable_cpu_ep_fallback": "1"
                   }
                 },
                 "provider_options": [

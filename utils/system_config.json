@@ -1,0 +1,55 @@
+{
+  "npu": {
+    "type": "LocalSystem",
+    "inference_settings": [
+      {
+        "session_options": {
+          "ep_selection": {
+            "policy": "PREFER_NPU"
+          },
+          "extra_session_config": {
+            "session.disable_cpu_ep_fallback": "0",
+            "ep.context_enable": "1",
+            "ep.context_embed_mode": "0"
+          }
+        }
+      }
+    ]
+  },
+  "cpu": {
+    "type": "LocalSystem",
+    "accelerators": [
+      { "device": "cpu", "execution_providers": ["CPUExecutionProvider"] }
+    ]
+  },
+  "qnn": {
+    "type": "LocalSystem",
+    "accelerators": [
+      { "device": "npu", "execution_providers": ["QNNExecutionProvider"] }
+    ],
+    "inference_settings": [
+      {
+        "execution_provider": "QNNExecutionProvider",
+        "provider_options": [
+          {
+            "htp_graph_finalization_optimization_mode": 3,
+            "htp_performance_mode": "burst",
+            "offload_graph_io_quantization": "0"
+          }
+        ]
+      }
+    ]
+  },
+  "vitis": {
+    "type": "LocalSystem",
+    "accelerators": [
+      { "device": "npu", "execution_providers": ["VitisAIExecutionProvider"] }
+    ]
+  },
+  "ov": {
+    "type": "LocalSystem",
+    "accelerators": [
+      { "device": "npu", "execution_providers": ["OpenVINOExecutionProvider"] }
+    ]
+  }
+}

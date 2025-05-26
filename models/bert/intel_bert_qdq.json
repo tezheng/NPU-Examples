@@ -6,11 +6,11 @@
     "io_config": {
       "input_names": ["input_ids", "attention_mask", "token_type_ids"],
       "input_shapes": [
-        [1, 128],
-        [1, 128],
-        [1, 128]
+        [1, 512],
+        [1, 512],
+        [1, 512]
       ],
-      "input_types": ["int32", "float32", "int32"],
+      "input_types": ["int32", "int32", "int32"],
       "output_names": ["logits"]
     }
   },
@@ -24,12 +24,12 @@
     "dynamic_shape_to_fixed": {
       "type": "DynamicToFixedShape",
       "dim_param": ["batch_size", "sequence_length"],
-      "dim_value": [1, 128]
+      "dim_value": [1, 512]
     },
     "surgery": {
       "type": "GraphSurgeries",
       "surgeries": [
-        { "surgeon": "ReplaceAttentionMaskValue" },
+        { "surgeon": "ReplaceAttentionMaskValue", "replacement": -100.0 },
         { "surgeon": "MatMulAddToGemm" }
       ]
     },
@@ -49,9 +49,9 @@
     "quantization": {
       "type": "OnnxStaticQuantization",
       "data_config": "calib_data",
-      "quant_preprocess": true,
-      "activation_type": "QUInt16",
-      "weight_type": "QUInt8"
+      "activation_type": "uint16",
+      "precision": "uint8",
+      "quant_preprocess": true
     }
   },
   "data_configs": [
@@ -65,7 +65,7 @@
       },
       "pre_process_data_config": {
         "input_cols": ["sentence1", "sentence2"],
-        "max_length": 128,
+        "max_length": 512,
         "padding": "max_length"
       },
       "dataloader_config": { "batch_size": 1 }
@@ -80,14 +80,14 @@
       },
       "pre_process_data_config": {
         "input_cols": ["sentence1", "sentence2"],
-        "max_length": 128,
+        "max_length": 512,
         "padding": "max_length"
       },
       "dataloader_config": { "batch_size": 1 }
     }
   ],
   "evaluators": {
-    "common_evaluator": {
+    "scl_evaluator": {
       "metrics": [
         {
           "name": "accuracy",

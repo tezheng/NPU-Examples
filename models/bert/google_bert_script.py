@@ -199,8 +199,8 @@ def eval_squad(
 
         for sample in tqdm(dataset, position=0, desc="Loading Data"):
             encoded_input = tokenizer(
-                sample["context"],
                 sample["question"],
+                sample["context"],
                 padding="max_length",
                 max_length=input_ids_shape[1],
                 truncation=True,
